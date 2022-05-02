@@ -7,3 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = {version = "~3", features = ["derive"]}
+tree-sitter = {version = "~0.20"}
+
+[build-dependencies]
+cc="*"

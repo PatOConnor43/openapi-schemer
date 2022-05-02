@@ -1,5 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 
+mod bindings;
+mod operation;
+
 #[derive(Parser, Debug)]
 struct Cli {
     #[clap(parse(from_os_str), value_name = "INPUT", value_hint = clap::ValueHint::DirPath, required = true)]
@@ -37,7 +40,7 @@ fn main() {
         Some(_) => match args.command {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
-                    println!("list supplied")
+                    operation::list(args.input.unwrap().clone());
                 }
             },
         },
