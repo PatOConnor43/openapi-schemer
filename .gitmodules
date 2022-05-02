@@ -1,0 +1,3 @@
+[submodule "tree-sitter-yaml"]
+	path = tree-sitter-yaml
+	url = https://github.com/ikatyang/tree-sitter-yaml
