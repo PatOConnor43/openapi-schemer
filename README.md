@@ -1,4 +1,4 @@
-# openapi-schemer
+# openapi-schemer 🦝
 A command line tool to query and modify OpenAPI specs
 
 The goal of this project is to give users a way to interact with their OpenAPI
