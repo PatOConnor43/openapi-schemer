@@ -1,18 +1,12 @@
-use std::{fs::File, io::Read, path::PathBuf};
-
 use tree_sitter::{Parser, Query, QueryCursor};
 
 use crate::bindings;
 
-pub fn list(path: PathBuf) {
-    let mut file = File::open(path).expect("Unable to open the file");
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .expect("Unable to read the file");
-    let language = bindings::language();
+pub fn list(contents: &str) {
     let mut parser = Parser::new();
+    let language = bindings::language();
     parser.set_language(language).unwrap();
-    let tree = parser.parse(contents.clone(), None).unwrap();
+    let tree = parser.parse(contents, None).unwrap();
 
     // This query is an amalgamation of all the different supported http verbs.
     // First we find a key with the text that matches an http verb (get/post/put...),

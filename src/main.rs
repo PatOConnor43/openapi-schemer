@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read, path::PathBuf};
+
 use clap::{Args, Parser, Subcommand};
 
 mod bindings;
@@ -54,7 +56,8 @@ fn main() {
         Some(_) => match args.command {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
-                    operation::list(args.input.unwrap().clone());
+                    let contents = get_file_contents(args.input.unwrap());
+                    operation::list(&contents);
                 }
             },
             Commands::Path(subcommand) => match subcommand.command {
@@ -64,4 +67,12 @@ fn main() {
     }
 
     ()
+}
+
+fn get_file_contents(path: PathBuf) -> String {
+    let mut file = File::open(path).expect("Unable to open the file");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Unable to read the file");
+    return contents;
 }
