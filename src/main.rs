@@ -49,7 +49,6 @@ enum PathCommands {
 fn main() {
     let args = Cli::parse();
 
-    println!("{:?}", args);
     match args.input {
         None => unreachable!("Clap requires input"),
         Some(_) => match args.command {
