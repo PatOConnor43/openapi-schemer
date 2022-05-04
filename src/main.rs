@@ -2,6 +2,7 @@ use clap::{Args, Parser, Subcommand};
 
 mod bindings;
 mod operation;
+mod path;
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -16,6 +17,7 @@ struct Cli {
 enum Commands {
     #[clap(arg_required_else_help = true)]
     Operation(Operation),
+    Path(Path),
 }
 
 #[derive(Debug, Args)]
@@ -31,6 +33,19 @@ enum OperationCommands {
     List,
 }
 
+#[derive(Debug, Args)]
+#[clap(args_conflicts_with_subcommands = true)]
+struct Path {
+    #[clap(subcommand)]
+    command: PathCommands,
+}
+
+#[derive(Debug, Subcommand)]
+enum PathCommands {
+    /// List the paths for a spec
+    List,
+}
+
 fn main() {
     let args = Cli::parse();
 
@@ -42,6 +57,9 @@ fn main() {
                 OperationCommands::List => {
                     operation::list(args.input.unwrap().clone());
                 }
+            },
+            Commands::Path(subcommand) => match subcommand.command {
+                PathCommands::List => path::list(args.input.unwrap().clone()),
             },
         },
     }
