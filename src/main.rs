@@ -3,6 +3,7 @@ use std::{fs::File, io::Read, path::PathBuf};
 use clap::{Args, Parser, Subcommand};
 
 mod bindings;
+mod error;
 mod operation;
 mod path;
 mod schema;
