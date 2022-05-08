@@ -1,8 +1,26 @@
+use std::fmt::Display;
+
 use tree_sitter::{Parser, Query, QueryCursor};
 
-use crate::bindings;
+use crate::{bindings, error::OpenapiSchemerError};
 
-pub fn list(contents: &str) {
+pub struct ListResult<'a> {
+    entries: Vec<&'a str>,
+}
+
+impl<'a> ListResult<'a> {
+    pub fn new(list: Vec<&str>) -> ListResult<'_> {
+        ListResult { entries: list }
+    }
+}
+
+impl Display for ListResult<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.entries.join("\n"))
+    }
+}
+
+pub fn list(contents: &str) -> Result<ListResult, OpenapiSchemerError> {
     let mut parser = Parser::new();
     let language = bindings::language();
     parser.set_language(language).unwrap();
@@ -73,11 +91,15 @@ pub fn list(contents: &str) {
     let mut qc = QueryCursor::new();
     let provider = contents.as_bytes();
 
+    let mut entries = Vec::new();
     for qm in qc.matches(&query, tree.root_node(), provider) {
         if let Some(cap) = qm.captures.get(2) {
-            if let Ok(route) = cap.node.utf8_text(provider) {
-                println!("{}", route);
+            if let Ok(operation) = cap.node.utf8_text(provider) {
+                entries.push(operation);
             }
         }
     }
+    Ok(ListResult::new(entries))
+}
+
 }

@@ -73,7 +73,10 @@ fn main() {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
                     let contents = get_file_contents(args.input.unwrap());
-                    operation::list(&contents);
+                    match operation::list(&contents) {
+                        Ok(result) => println!("{}", result),
+                        Err(err) => eprintln!("Failed: {}", err),
+                    }
                 }
             },
             Commands::Path(subcommand) => match subcommand.command {
