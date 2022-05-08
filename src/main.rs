@@ -5,6 +5,7 @@ use clap::{Args, Parser, Subcommand};
 mod bindings;
 mod operation;
 mod path;
+mod schema;
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -20,6 +21,7 @@ enum Commands {
     #[clap(arg_required_else_help = true)]
     Operation(Operation),
     Path(Path),
+    Schema(Schema),
 }
 
 #[derive(Debug, Args)]
@@ -48,6 +50,19 @@ enum PathCommands {
     List,
 }
 
+#[derive(Debug, Args)]
+#[clap(args_conflicts_with_subcommands = true)]
+struct Schema {
+    #[clap(subcommand)]
+    command: SchemaCommands,
+}
+
+#[derive(Debug, Subcommand)]
+enum SchemaCommands {
+    /// List the schemas
+    List,
+}
+
 fn main() {
     let args = Cli::parse();
 
@@ -62,6 +77,12 @@ fn main() {
             },
             Commands::Path(subcommand) => match subcommand.command {
                 PathCommands::List => path::list(args.input.unwrap().clone()),
+            },
+            Commands::Schema(subcommand) => match subcommand.command {
+                SchemaCommands::List => {
+                    let contents = get_file_contents(args.input.unwrap());
+                    schema::list(&contents);
+                }
             },
         },
     }
