@@ -102,4 +102,58 @@ pub fn list(contents: &str) -> Result<ListResult, OpenapiSchemerError> {
     Ok(ListResult::new(entries))
 }
 
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use super::*;
+
+    #[test]
+    fn test_list() -> Result<(), Box<dyn Error>> {
+        let contents = r#"
+paths:
+  /pets:
+    delete:
+      operationId: deletePets
+    get:
+      summary: List all pets
+      operationId: getPets
+    post:
+      summary: Create a pet
+      operationId: postPets
+    trace:
+      operationId: tracePets
+    options:
+      operationId: optionsPets
+    put:
+      operationId: putPets
+    head:
+      operationId: headPets
+    connect:
+      operationId: connectPets
+
+  /pets/{petId}:
+    get:
+      summary: Info for a specific pet
+      operationId: showPetById
+
+            "#;
+        let result = list(contents)?;
+        assert_eq!(
+            vec![
+                "deletePets",
+                "getPets",
+                "postPets",
+                "tracePets",
+                "optionsPets",
+                "putPets",
+                "headPets",
+                "connectPets",
+                "showPetById"
+            ],
+            result.entries,
+            "Returned operations did not match expected operations"
+        );
+        Ok(())
+    }
 }
