@@ -28,6 +28,7 @@ pub fn language() -> Language {
     unsafe { tree_sitter_yaml() }
 }
 
+#[derive(Clone, Debug)]
 pub struct OperationNode {
     pub text: String,
 }

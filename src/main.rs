@@ -1,5 +1,6 @@
 use std::{fs::File, io::Read, path::PathBuf};
 
+use bindings::TreeSitterOperationParser;
 use clap::{Args, Parser, Subcommand};
 
 mod bindings;
@@ -73,7 +74,8 @@ fn main() {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
                     let contents = get_file_contents(args.input.unwrap());
-                    match operation::list(&contents) {
+                    let parser = TreeSitterOperationParser::new(&contents);
+                    match operation::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
                     }

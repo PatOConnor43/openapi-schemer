@@ -1,10 +1,8 @@
 use std::fmt::Display;
 
-use crate::{
-    bindings::{self, OperationParser},
-    error::OpenapiSchemerError,
-};
+use crate::{bindings::OperationParser, error::OpenapiSchemerError};
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct ListResult {
     entries: Vec<String>,
 }
@@ -21,8 +19,7 @@ impl Display for ListResult {
     }
 }
 
-pub fn list(contents: &str) -> Result<ListResult, OpenapiSchemerError> {
-    let parser = bindings::TreeSitterOperationParser::new(contents);
+pub fn list<T: OperationParser>(parser: T) -> Result<ListResult, OpenapiSchemerError> {
     let nodes = parser.get_operation_nodes();
     let node_texts = nodes
         .into_iter()
@@ -35,5 +32,31 @@ pub fn list(contents: &str) -> Result<ListResult, OpenapiSchemerError> {
 mod tests {
     use std::error::Error;
 
+    use crate::bindings::{self, OperationNode};
+
     use super::*;
+
+    struct MockParser {
+        nodes: Vec<OperationNode>,
+    }
+    impl MockParser {
+        fn new(nodes: Vec<OperationNode>) -> MockParser {
+            MockParser { nodes }
+        }
+    }
+    impl OperationParser for MockParser {
+        fn get_operation_nodes(&self) -> Vec<bindings::OperationNode> {
+            self.nodes.to_owned()
+        }
+    }
+
+    #[test]
+    fn test_list() -> Result<(), Box<dyn Error>> {
+        let parser = MockParser::new(vec![OperationNode {
+            text: "test1".to_string(),
+        }]);
+        let result = list(parser)?;
+        assert_eq!(result, ListResult::new(vec!["test1".to_string()]));
+        Ok(())
+    }
 }
