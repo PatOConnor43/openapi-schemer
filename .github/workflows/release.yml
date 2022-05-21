@@ -47,14 +47,6 @@ jobs:
           # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
           echo "SCHEMER_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           echo "version is: ${{ env.SCHEMER_VERSION }}"
-      - name: Create GitHub release
-        id: release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.SCHEMER_VERSION }}
-          release_name: ${{ env.SCHEMER_VERSION }}
       # Drafts your next Release notes as Pull Requests are merged into "master"
       - uses: release-drafter/release-drafter@v5
         id: update_release_draft
@@ -143,7 +135,7 @@ jobs:
     - name: Build archive
       shell: bash
       run: |
-        staging="openapi-schemer-${{ needs.create-release.outputs.schemer_version }}-${{ matrix.target }}"
+        staging="openapi-schemer-${{ needs.update_release_draft.outputs.schemer_version }}-${{ matrix.target }}"
         mkdir -p "$staging"/{complete,doc}
 
         cp {README.md,LICENSE} "$staging/"
@@ -156,5 +148,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload "${{ needs.update_release_draft.outputs.upload_url }}" ${{ env.ASSET }}
+        gh release upload --clobber "https://uploads.github.com/repos/PatOConnor43/openapi-schemer/releases/${{ needs.update_release_draft.outputs.id }}/assets" ${{ env.ASSET }}
 
