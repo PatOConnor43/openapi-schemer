@@ -32,6 +32,7 @@ jobs:
       upload_url: ${{ steps.update_release_draft.outputs.upload_url }}
       id: ${{ steps.update_release_draft.outputs.id }}
       name: ${{ steps.update_release_draft.outputs.name }}
+      tag_name: ${{ steps.update_release_draft.outputs.tag_name }}
       schemer_version: ${{ env.SCHEMER_VERSION }}
     permissions:
       contents: write  # for release-drafter/release-drafter to create a github release
@@ -148,5 +149,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload --clobber "https://uploads.github.com/repos/PatOConnor43/openapi-schemer/releases/${{ needs.update_release_draft.outputs.id }}/assets" ${{ env.ASSET }}
+        gh release upload --clobber "https://uploads.github.com/repos/PatOConnor43/openapi-schemer/releases/${{ needs.update_release_draft.outputs.tag_name }}/assets" ${{ env.ASSET }}
 
