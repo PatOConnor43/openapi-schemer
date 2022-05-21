@@ -25,13 +25,36 @@ on:
     - "[0-9]+.[0-9]+.[0-9]+"
 jobs:
   update_release_draft:
+    env:
+      # Set to force version number, e.g., when no tag exists.
+      SCHEMER_VERSION: TEST-0.0.0
     outputs:
       upload_url: ${{ steps.update_release_draft.outputs.upload_url }}
+      id: ${{ steps.update_release_draft.outputs.id }}
+      name: ${{ steps.update_release_draft.outputs.name }}
+      schemer_version: ${{ env.SCHEMER_VERSION }}
     permissions:
       contents: write  # for release-drafter/release-drafter to create a github release
       pull-requests: write  # for release-drafter/release-drafter to add label to PR
     runs-on: ubuntu-latest
     steps:
+      - name: Get the release version from the tag
+        shell: bash
+        if: env.SCHEMER_VERSION == ''
+        run: |
+          # Apparently, this is the right way to get a tag name. Really?
+          #
+          # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "SCHEMER_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.SCHEMER_VERSION }}"
+      - name: Create GitHub release
+        id: release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.SCHEMER_VERSION }}
+          release_name: ${{ env.SCHEMER_VERSION }}
       # Drafts your next Release notes as Pull Requests are merged into "master"
       - uses: release-drafter/release-drafter@v5
         id: update_release_draft
@@ -78,16 +101,6 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: recursive
-
-          #- name: Install packages (Ubuntu)
-          #  if: matrix.os == 'ubuntu-18.04'
-          #  run: |
-          #    ci/ubuntu-install-packages
-
-          #- name: Install packages (macOS)
-          #  if: matrix.os == 'macos-latest'
-          #  run: |
-          #    ci/macos-install-packages
 
     - name: Install Rust
       uses: actions-rs/toolchain@v1
@@ -139,21 +152,6 @@ jobs:
         tar czf "$staging.tar.gz" "$staging"
         echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
 
-        #- name: Upload release archive
-        #  uses: actions/upload-release-asset@v1.0.1
-        #  env:
-        #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        #  with:
-        #    upload_url: ${{ needs.update_release_draft.outputs.upload_url }}
-        #    asset_path: ${{ env.ASSET }}
-        #    asset_name: ${{ env.ASSET }}
-        #    asset_content_type: application/octet-stream
-        #- name: Release
-        #  uses: softprops/action-gh-release@v1
-        #  if: startsWith(github.ref, 'refs/tags/')
-        #  with:
-        #    files:
-        #      ${{ env.ASSET }}
     - name: Release built binaries
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
