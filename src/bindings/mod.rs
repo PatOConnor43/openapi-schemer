@@ -16,6 +16,7 @@
 //! [tree-sitter]: https://tree-sitter.github.io/
 
 pub mod path;
+pub mod schema;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 extern "C" {
