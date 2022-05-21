@@ -27,3 +27,36 @@ pub fn list<T: PathParser>(parser: T) -> Result<ListResult, OpenapiSchemerError>
         .collect();
     Ok(ListResult::new(node_texts))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use crate::bindings::path::PathNode;
+
+    use super::*;
+
+    struct MockParser {
+        nodes: Vec<PathNode>,
+    }
+    impl MockParser {
+        fn new(nodes: Vec<PathNode>) -> MockParser {
+            MockParser { nodes }
+        }
+    }
+    impl PathParser for MockParser {
+        fn get_path_nodes(&self) -> Vec<PathNode> {
+            self.nodes.to_owned()
+        }
+    }
+
+    #[test]
+    fn test_list() -> Result<(), Box<dyn Error>> {
+        let parser = MockParser::new(vec![PathNode {
+            text: "test1".to_string(),
+        }]);
+        let result = list(parser)?;
+        assert_eq!(result, ListResult::new(vec!["test1".to_string()]));
+        Ok(())
+    }
+}
