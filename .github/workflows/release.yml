@@ -125,7 +125,6 @@ jobs:
     - name: Build archive
       shell: bash
       run: |
-        outdir="$(ci/cargo-out-dir "${{ env.TARGET_DIR }}")"
         staging="openapi-schemer-${{ needs.create-release.outputs.schemer_version }}-${{ matrix.target }}"
         mkdir -p "$staging"/{complete,doc}
 
