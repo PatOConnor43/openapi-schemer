@@ -44,13 +44,11 @@ jobs:
           echo "SCHEMER_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           echo "version is: ${{ env.SCHEMER_VERSION }}"
       - name: Create GitHub release
-        id: release
-        uses: actions/create-release@v1
+        uses: elgohr/Github-Release-Action@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.SCHEMER_VERSION }}
-          release_name: ${{ env.SCHEMER_VERSION }}
+          title: ${{ env.SCHEMER_VERSION }}
 
   build-release:
     name: build-release
