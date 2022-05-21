@@ -46,3 +46,51 @@ impl<'a> PathParser for TreeSitterPathParser<'a> {
         return entries;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use crate::bindings::path::{PathParser, TreeSitterPathParser};
+
+    #[test]
+    fn test_list() -> Result<(), Box<dyn Error>> {
+        let contents = r#"
+paths:
+  /pets:
+    delete:
+      operationId: deletePets
+    get:
+      summary: List all pets
+      operationId: getPets
+    post:
+      summary: Create a pet
+      operationId: postPets
+    trace:
+      operationId: tracePets
+    options:
+      operationId: optionsPets
+    put:
+      operationId: putPets
+    head:
+      operationId: headPets
+    connect:
+      operationId: connectPets
+
+  /pets/{petId}:
+    get:
+      summary: Info for a specific pet
+      operationId: showPetById
+
+            "#;
+        let parser = TreeSitterPathParser::new(contents);
+        let result = parser.get_path_nodes();
+        let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
+        assert_eq!(
+            vec!["/pets", "/pets/{petId}"],
+            node_texts,
+            "Returned paths did not match expected paths"
+        );
+        Ok(())
+    }
+}
