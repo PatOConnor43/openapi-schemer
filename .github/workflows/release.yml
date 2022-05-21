@@ -25,9 +25,9 @@ on:
     - "[0-9]+.[0-9]+.[0-9]+"
 jobs:
   update_release_draft:
-    env:
+    #env:
       # Set to force version number, e.g., when no tag exists.
-      SCHEMER_VERSION: TEST-0.0.0
+      #SCHEMER_VERSION: TEST-0.0.0
     outputs:
       upload_url: ${{ steps.update_release_draft.outputs.upload_url }}
       id: ${{ steps.update_release_draft.outputs.id }}
