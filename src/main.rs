@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read, path::PathBuf};
 
-use bindings::TreeSitterOperationParser;
+use bindings::{path::TreeSitterPathParser, TreeSitterOperationParser};
 use clap::{Args, Parser, Subcommand};
 
 mod bindings;
@@ -82,7 +82,14 @@ fn main() {
                 }
             },
             Commands::Path(subcommand) => match subcommand.command {
-                PathCommands::List => path::list(args.input.unwrap().clone()),
+                PathCommands::List => {
+                    let contents = get_file_contents(args.input.unwrap());
+                    let parser = TreeSitterPathParser::new(&contents);
+                    match path::list(parser) {
+                        Ok(result) => println!("{}", result),
+                        Err(err) => eprintln!("Failed: {}", err),
+                    }
+                }
             },
             Commands::Schema(subcommand) => match subcommand.command {
                 SchemaCommands::List => {
