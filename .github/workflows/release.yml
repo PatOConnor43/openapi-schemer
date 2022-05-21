@@ -1,0 +1,156 @@
+# THIS WAS COPIED FROM https://github.com/BurntSushi/ripgrep/blob/master/.github/workflows/release.yml
+#
+# The way this works is the following:
+#
+# The create-release job runs purely to initialize the GitHub release itself
+# and to output upload_url for the following job.
+#
+# The build-release job runs only once create-release is finished. It gets the
+# release upload URL from create-release job outputs, then builds the release
+# executables for each supported platform and attaches them as release assets
+# to the previously created release.
+#
+# The key here is that we create the release only once.
+#
+# Reference:
+# https://eugene-babichenko.github.io/blog/2020/05/09/github-actions-cross-platform-auto-releases/
+
+name: release
+on:
+  push:
+    # Enable when testing release infrastructure on a branch.
+    branches:
+    - add-release-action
+    tags:
+    - "[0-9]+.[0-9]+.[0-9]+"
+jobs:
+  update_release_draft:
+    env:
+      # Set to force version number, e.g., when no tag exists.
+      SCHEMER_VERSION: TEST-0.0.0
+    outputs:
+      upload_url: ${{ steps.update_release_draft.outputs.upload_url }}
+      id: ${{ steps.update_release_draft.outputs.id }}
+      name: ${{ steps.update_release_draft.outputs.name }}
+      tag_name: ${{ steps.update_release_draft.outputs.tag_name }}
+      schemer_version: ${{ env.SCHEMER_VERSION }}
+    permissions:
+      contents: write  # for release-drafter/release-drafter to create a github release
+      pull-requests: write  # for release-drafter/release-drafter to add label to PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the release version from the tag
+        shell: bash
+        if: env.SCHEMER_VERSION == ''
+        run: |
+          # Apparently, this is the right way to get a tag name. Really?
+          #
+          # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "SCHEMER_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.SCHEMER_VERSION }}"
+      # Drafts your next Release notes as Pull Requests are merged into "master"
+      - uses: release-drafter/release-drafter@v5
+        id: update_release_draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          version: ${{ env.SCHEMER_VERSION }}
+          name: ${{ env.SCHEMER_VERSION }}
+
+  build-release:
+    permissions:
+      contents: write
+    name: build-release
+    needs: ['update_release_draft']
+    runs-on: ${{ matrix.os }}
+    env:
+      # For some builds, we use cross to test on 32-bit and big-endian
+      # systems.
+      CARGO: cargo
+      # When CARGO is set to CROSS, this is set to `--target matrix.target`.
+      TARGET_FLAGS: ""
+      # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
+      TARGET_DIR: ./target
+      # Emit backtraces on panics.
+      RUST_BACKTRACE: 1
+      # Build static releases with PCRE2.
+      PCRE2_SYS_STATIC: 1
+    strategy:
+      matrix:
+        build: [linux, linux-arm, macos]
+        include:
+        - build: linux
+          os: ubuntu-18.04
+          rust: nightly
+          target: x86_64-unknown-linux-musl
+        - build: linux-arm
+          os: ubuntu-18.04
+          rust: nightly
+          target: arm-unknown-linux-gnueabihf
+        - build: macos
+          os: macos-latest
+          rust: nightly
+          target: x86_64-apple-darwin
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        profile: minimal
+        override: true
+        target: ${{ matrix.target }}
+
+    - name: Use Cross
+      shell: bash
+      run: |
+        cargo install cross
+        echo "CARGO=cross" >> $GITHUB_ENV
+        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+        echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+
+    - name: Show command used for Cargo
+      run: |
+        echo "cargo command is: ${{ env.CARGO }}"
+        echo "target flag is: ${{ env.TARGET_FLAGS }}"
+        echo "target dir is: ${{ env.TARGET_DIR }}"
+
+    - name: Build release binary
+      run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
+
+    - name: Strip release binary (linux and macos)
+      if: matrix.build == 'linux' || matrix.build == 'macos'
+      run: strip "target/${{ matrix.target }}/release/openapi-schemer"
+
+    - name: Strip release binary (arm)
+      if: matrix.build == 'linux-arm'
+      run: |
+        docker run --rm -v \
+          "$PWD/target:/target:Z" \
+          rustembedded/cross:arm-unknown-linux-gnueabihf \
+          arm-linux-gnueabihf-strip \
+          /target/arm-unknown-linux-gnueabihf/release/openapi-schemer
+
+    - name: Build archive
+      shell: bash
+      run: |
+        staging="openapi-schemer-${{ needs.update_release_draft.outputs.schemer_version }}-${{ matrix.target }}"
+        mkdir -p "$staging"/{complete,doc}
+
+        cp {README.md,LICENSE} "$staging/"
+
+        cp "target/${{ matrix.target }}/release/openapi-schemer" "$staging/"
+        tar czf "$staging.tar.gz" "$staging"
+        echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
+
+    - name: Release built binaries
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload --clobber "${{ needs.update_release_draft.outputs.upload_url }}" ${{ env.ASSET }}
+
