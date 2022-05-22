@@ -140,7 +140,7 @@ jobs:
       shell: bash
       run: |
         staging="openapi-schemer-${{ needs.update_release_draft.outputs.schemer_version }}-${{ matrix.target }}"
-        mkdir -p "$staging"/{complete,doc}
+        mkdir -p "$staging"
 
         cp {README.md,LICENSE} "$staging/"
 
