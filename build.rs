@@ -1,6 +1,8 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 fn main() {
+    let target = env::var("TARGET").expect("TARGET was not set");
+
     let dir: PathBuf = ["tree-sitter-yaml", "src"].iter().collect();
 
     let mut c_config = cc::Build::new();
@@ -27,5 +29,9 @@ fn main() {
     cpp_config.file(&scanner_path);
     cpp_config.compile("scanner");
     println!("cargo:rerun-if-changed={}", scanner_path.to_str().unwrap());
-    println!("cargo:rustc-link-lib=static=stdc++")
+    if target.contains("darwin") {
+        println!("cargo:rustc-link-lib=static=c++")
+    } else {
+        println!("cargo:rustc-link-lib=static=stdc++")
+    }
 }
