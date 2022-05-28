@@ -30,7 +30,7 @@ fn main() {
     cpp_config.compile("scanner");
     println!("cargo:rerun-if-changed={}", scanner_path.to_str().unwrap());
     if target.contains("darwin") {
-        println!("cargo:rustc-link-lib=static=c++")
+        println!("cargo:rustc-link-lib=dylib=c++")
     } else {
         println!("cargo:rustc-link-lib=static=stdc++")
     }
