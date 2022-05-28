@@ -140,7 +140,7 @@ jobs:
       shell: bash
       run: |
         staging="openapi-schemer-${{ needs.update_release_draft.outputs.schemer_version }}-${{ matrix.target }}"
-        mkdir -p "$staging"/{complete,doc}
+        mkdir -p "$staging"
 
         cp {README.md,LICENSE} "$staging/"
 
@@ -152,5 +152,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload --clobber "${{ needs.update_release_draft.outputs.upload_url }}" ${{ env.ASSET }}
+        gh release upload --clobber ${{ needs.update_release_draft.outputs.tag_name }} ${{ env.ASSET }}
 
