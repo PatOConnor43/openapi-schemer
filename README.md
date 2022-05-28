@@ -1,6 +1,7 @@
 # openapi-schemer 🦝
 A command line tool to query and modify OpenAPI specs
 
+
 The goal of this project is to give users a way to interact with their OpenAPI
 specs in a way that doesn't just feel like a big blob of yaml. Some of the
 features I'd like to implement with this tool:
