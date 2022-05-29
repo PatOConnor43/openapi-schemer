@@ -8,9 +8,6 @@ servers:
   - url: http://petstore.swagger.io/v1
 paths:
   /pets:
-    delete:
-      summary: lmao
-      operationId: ayyDelete
     get:
       summary: List all pets
       operationId: listPets
