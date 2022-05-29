@@ -1,0 +1,38 @@
+openapi: '3.0.0'
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  description: Multi-file boilerplate for OpenAPI Specification.
+  license:
+    name: MIT
+  contact:
+    name: API Support
+    url: http://www.example.com/support
+    email: support@example.com
+servers:
+  - url: http://petstore.swagger.io/v1
+tags:
+  - name: pets
+paths:
+  /pets:
+    $ref: 'resources/pets.yaml'
+  /pets/{petId}:
+    $ref: 'resources/pet.yaml'
+components:
+  parameters:
+    petId:
+      $ref: 'parameters/path/petId.yaml'
+    limit:
+      $ref: 'parameters/query/limit.yaml'
+  schemas:
+    Pet:
+      $ref: 'schemas/Pet.yaml'
+    Pets:
+      $ref: 'schemas/Pets.yaml'
+    Error:
+      $ref: 'schemas/Error.yaml'
+  responses:
+    UnexpectedError:
+      $ref: 'responses/UnexpectedError.yaml'
+    NullResponse:
+      $ref: 'responses/NullResponse.yaml'
