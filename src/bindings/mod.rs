@@ -15,6 +15,7 @@
 //! [Parser]: https://docs.rs/tree-sitter/*/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 
+pub mod key_finder;
 pub mod path;
 pub mod schema;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
