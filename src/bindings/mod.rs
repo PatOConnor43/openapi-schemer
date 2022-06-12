@@ -242,4 +242,77 @@ paths:
         );
         Ok(())
     }
+
+    #[test]
+    fn test_list_multifile() -> Result<(), Box<dyn Error>> {
+        let contents = HashMap::from([
+            (
+                PathBuf::from("#"),
+                r#"
+paths:
+  /pets:
+    $ref: paths/pets.yaml
+  /pets/{petId}:
+    $ref: paths/pet.yaml
+                "#
+                .to_string(),
+            ),
+            (
+                PathBuf::from("paths/pets.yaml"),
+                r#"
+// pets.yaml
+delete:
+  operationId: deletePets
+get:
+  summary: List all pets
+  operationId: getPets
+post:
+  summary: Create a pet
+  operationId: postPets
+trace:
+  operationId: tracePets
+options:
+  operationId: optionsPets
+put:
+  operationId: putPets
+head:
+  operationId: headPets
+connect:
+  operationId: connectPets
+
+        "#
+                .to_string(),
+            ),
+            (
+                PathBuf::from("paths/pet.yaml"),
+                r#"
+// pet.yaml
+get:
+  summary: Info for a specific pet
+  operationId: showPetById
+
+        "#
+                .to_string(),
+            ),
+        ]);
+        let parser = TreeSitterOperationParser::<ContentProviderMap>::new(contents.into());
+        let result = parser.get_operation_nodes();
+        let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
+        assert_eq!(
+            vec![
+                "deletePets",
+                "getPets",
+                "postPets",
+                "tracePets",
+                "optionsPets",
+                "putPets",
+                "headPets",
+                "connectPets",
+                "showPetById"
+            ],
+            node_texts,
+            "Returned operations did not match expected operations"
+        );
+        Ok(())
+    }
 }
