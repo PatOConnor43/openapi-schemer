@@ -75,12 +75,12 @@ fn main() {
         Some(_) => match args.command {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
-                    let contents = get_file_contents(args.input.unwrap());
-                    let parser = TreeSitterOperationParser::new(&contents);
-                    match operation::list(parser) {
-                        Ok(result) => println!("{}", result),
-                        Err(err) => eprintln!("Failed: {}", err),
-                    }
+                    //let contents = get_file_contents(args.input.unwrap());
+                    //let parser = TreeSitterOperationParser::new(&contents);
+                    //match operation::list(parser) {
+                    //    Ok(result) => println!("{}", result),
+                    //    Err(err) => eprintln!("Failed: {}", err),
+                    //}
                 }
             },
             Commands::Path(subcommand) => match subcommand.command {

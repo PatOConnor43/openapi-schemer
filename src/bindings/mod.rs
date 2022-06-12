@@ -17,6 +17,8 @@
 
 pub mod path;
 pub mod schema;
+use std::{collections::HashMap, path::PathBuf};
+
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 extern "C" {
@@ -30,6 +32,27 @@ pub fn language() -> Language {
     unsafe { tree_sitter_yaml() }
 }
 
+pub trait ContentProvider {
+    fn get(&self, path: PathBuf) -> String;
+}
+
+struct ContentProviderMap {
+    contents: HashMap<PathBuf, String>,
+}
+impl ContentProvider for ContentProviderMap {
+    fn get(&self, path: PathBuf) -> String {
+        return match self.contents.get(&path) {
+            Some(path) => path.to_string(),
+            None => "".to_string(),
+        };
+    }
+}
+impl Into<ContentProviderMap> for HashMap<PathBuf, String> {
+    fn into(self) -> ContentProviderMap {
+        ContentProviderMap { contents: self }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct OperationNode {
     pub text: String,
@@ -39,20 +62,26 @@ pub trait OperationParser {
     fn get_operation_nodes(&self) -> Vec<OperationNode>;
 }
 
-pub struct TreeSitterOperationParser<'a> {
-    contents: &'a str,
+pub struct TreeSitterOperationParser<T: ContentProvider> {
+    provider: Box<T>,
 }
-impl<'a> TreeSitterOperationParser<'a> {
-    pub fn new(contents: &str) -> TreeSitterOperationParser {
-        TreeSitterOperationParser { contents }
+impl<T> TreeSitterOperationParser<T>
+where
+    T: ContentProvider,
+{
+    pub fn new(provider: T) -> TreeSitterOperationParser<T> {
+        TreeSitterOperationParser {
+            provider: Box::new(provider),
+        }
     }
 }
-impl<'a> OperationParser for TreeSitterOperationParser<'a> {
+impl<T: ContentProvider> OperationParser for TreeSitterOperationParser<T> {
     fn get_operation_nodes(&self) -> Vec<OperationNode> {
         let mut parser = Parser::new();
         let language = language();
         parser.set_language(language).unwrap();
-        let tree = parser.parse(self.contents, None).unwrap();
+        let root_content = self.provider.get(PathBuf::from("#"));
+        let tree = parser.parse(root_content.as_bytes(), None).unwrap();
 
         // This query is an amalgamation of all the different supported http verbs.
         // First we find a key with the text that matches an http verb (get/post/put...),
@@ -117,12 +146,12 @@ impl<'a> OperationParser for TreeSitterOperationParser<'a> {
         "#;
         let query = Query::new(language, query_string).expect("Could not construct query");
         let mut qc = QueryCursor::new();
-        let provider = self.contents.as_bytes();
+        let content = root_content.as_bytes();
 
         let mut entries = Vec::new();
-        for qm in qc.matches(&query, tree.root_node(), provider) {
+        for qm in qc.matches(&query, tree.root_node(), content) {
             if let Some(cap) = qm.captures.get(2) {
-                if let Ok(operation) = cap.node.utf8_text(provider) {
+                if let Ok(operation) = cap.node.utf8_text(content) {
                     entries.push(OperationNode {
                         text: operation.to_string(),
                     });
@@ -147,9 +176,9 @@ impl<'a> OperationParser for TreeSitterOperationParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
+    use std::{collections::HashMap, error::Error, path::PathBuf};
 
-    use crate::bindings::{OperationParser, TreeSitterOperationParser};
+    use crate::bindings::{ContentProviderMap, OperationParser, TreeSitterOperationParser};
 
     #[test]
     fn test_can_load_grammar() {
@@ -161,7 +190,9 @@ mod tests {
 
     #[test]
     fn test_list() -> Result<(), Box<dyn Error>> {
-        let contents = r#"
+        let contents = HashMap::from([(
+            PathBuf::from("#"),
+            r#"
 paths:
   /pets:
     delete:
@@ -188,8 +219,10 @@ paths:
       summary: Info for a specific pet
       operationId: showPetById
 
-            "#;
-        let parser = TreeSitterOperationParser::new(contents);
+                "#
+            .to_string(),
+        )]);
+        let parser = TreeSitterOperationParser::<ContentProviderMap>::new(contents.into());
         let result = parser.get_operation_nodes();
         let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
         assert_eq!(
