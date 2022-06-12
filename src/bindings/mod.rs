@@ -83,83 +83,83 @@ impl<T: ContentProvider> OperationParser for TreeSitterOperationParser<T> {
         let root_content = self.provider.get(PathBuf::from("#"));
         let tree = parser.parse(root_content.as_bytes(), None).unwrap();
 
-        // This query is an amalgamation of all the different supported http verbs.
-        // First we find a key with the text that matches an http verb (get/post/put...),
-        // then we look for a child `flow_node` that has the key `operationId`. If we find
-        // one we'll try to match the value of that node with should be the name of the
-        // operation.
-        let query_string = r#"
-        (block_mapping_pair
-           key: ((flow_node) @delete (eq? @delete "delete"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: (flow_node) @deletevalue (eq? @deletevalue "operationId")
-                       value: (flow_node) @deletevalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @get (eq? @get "get"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @getvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @head (eq? @head "head"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @headvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @options (eq? @options "options"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @optionsvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @patch (eq? @patch "patch"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @patchvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @post (eq? @post "post"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @postvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @put (eq? @put "put"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @putvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @connect (eq? @connect "connect"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @connectvalue
-                       ))))
-        (block_mapping_pair
-           key: ((flow_node) @trace (eq? @trace "trace"))
-           value: (block_node (block_mapping (block_mapping_pair
-                       key: ((flow_node) @operationId (eq? @operationId "operationId"))
-                       value: (flow_node) @tracevalue
-                       ))))
-        "#;
-        let query = Query::new(language, query_string).expect("Could not construct query");
+        let paths_query = create_key_query("paths");
+        let query = Query::new(language, &paths_query).expect("Could not construct query");
         let mut qc = QueryCursor::new();
         let content = root_content.as_bytes();
 
-        let mut entries = Vec::new();
-        for qm in qc.matches(&query, tree.root_node(), content) {
-            if let Some(cap) = qm.captures.get(2) {
-                if let Ok(operation) = cap.node.utf8_text(content) {
-                    entries.push(OperationNode {
-                        text: operation.to_string(),
-                    });
+        let mut entries: Vec<OperationNode> = vec![];
+        for qm in qc.matches(&query, tree.root_node(), content).nth(0) {
+            if let Some(_) = qm.captures.get(1) {
+                let paths_children_query = create_children_query("paths");
+                let query =
+                    Query::new(language, &paths_children_query).expect("Could not construct query");
+                let mut qc = QueryCursor::new();
+                for qm in qc.matches(&query, tree.root_node(), content) {
+                    println!("children {:?}", qm);
+                    if let Some(value_cap) = qm.captures.get(2) {
+                        println!("value_cap {:?}", value_cap.node.utf8_text(content).unwrap());
+                        let operation_query = create_operation_query();
+                        let query = Query::new(language, &operation_query)
+                            .expect("Could not construct query");
+                        let mut qc = QueryCursor::new();
+
+                        let mut found_operations = false;
+                        for qm in qc.matches(&query, value_cap.node, content) {
+                            found_operations = true;
+                            if let Some(cap) = qm.captures.get(1) {
+                                if let Ok(operation) = cap.node.utf8_text(content) {
+                                    entries.push(OperationNode {
+                                        text: operation.to_string(),
+                                    });
+                                }
+                            }
+                        }
+
+                        if !found_operations {
+                            // Didn't find any operations so look for $refs
+                        }
+                    }
                 }
             }
         }
         return entries;
     }
+}
+fn create_key_query(key: &str) -> String {
+    return format!(
+        r#"
+            (block_mapping_pair key: ((flow_node) @key (eq? @key "{}")) value: (block_node) @value)
+            "#,
+        key
+    );
+}
+fn create_children_query(key: &str) -> String {
+    return format!(
+        r#"
+            (block_mapping_pair
+             key: ((flow_node) @key (eq? @key "{}"))
+             value: [
+               (flow_node) @value
+               (block_node) @value
+             ]
+             )
+            "#,
+        key
+    );
+}
+fn create_operation_query() -> String {
+    return format!(
+        r#"
+            (block_mapping_pair
+             key: ((flow_node) @key (eq? @key "operationId"))
+             value: [
+               (flow_node) @value
+               (block_node) @value
+             ]
+             )
+            "#
+    );
 }
 
 /// The content of the [`node-types.json`][] file for this grammar.
