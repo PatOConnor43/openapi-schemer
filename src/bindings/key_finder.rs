@@ -1,6 +1,6 @@
 use std::{error::Error, path::PathBuf};
 
-use tree_sitter::{Parser, Query, QueryCursor};
+use tree_sitter::{Node, Parser, Query, QueryCursor, Tree};
 
 use super::language;
 pub struct TreeSitterKeyFinder<T: KeyFinderProvider> {
@@ -23,35 +23,85 @@ impl<'a, T: KeyFinderProvider> KeyFinder<'a> for TreeSitterKeyFinder<T> {
         &self,
         key: &'a str,
     ) -> Result<Vec<String>, Box<(dyn Error + 'static)>> {
+        // Split the keys
+        // For each segment:
+        //   - if there isn't a next segment: return the children keys
+        //   - if there is a next segment: recurse
         let split_keys: Vec<&str> = key.split('.').collect();
         if split_keys.is_empty() {
             return Err(Box::from("Invalid key"));
         }
         let mut parser = get_parser()?;
-        for k in split_keys {
-            let query = create_key_query(k);
-            let content = {
-                let path = &self.path;
-                self.get_content(path.to_owned())
-            };
-            let tree = parser.parse(content.to_string(), None);
-            if let None = tree {
-                return Err(Box::from("Could not parse file as yaml"));
-            }
-            let tree = tree.unwrap();
-            let query = Query::new(parser.language().unwrap(), &query)?;
+        let content = {
+            let path = &self.path;
+            self.get_content(path.to_owned())
+        };
+        let tree = parser.parse(content.to_string(), None);
+        if let None = tree {
+            return Err(Box::from("Could not parse file as yaml"));
+        }
+        let tree = tree.unwrap();
+
+        let find_node = |root_node: Node<'a>, content: &[u8], key: &str| -> Option<Node<'a>> {
+            let query = create_key_query(key);
+            let query = Query::new(language(), &query).unwrap();
             let mut qc = QueryCursor::new();
-            let mut found_components = None;
-            let bytes = content.as_bytes();
-            for qm in qc.matches(&query, tree.root_node(), bytes) {
-                println!("{:?}", qm.captures.get(0).unwrap().node.utf8_text(bytes));
-                found_components = match qm.captures.get(1) {
+            let mut node: Option<Node<'_>> = None;
+            for qm in qc.matches(&query, root_node, content) {
+                node = match qm.captures.get(1) {
                     Some(capture) => Some(capture.node),
                     None => None,
+                };
+                if node.is_some() {
+                    return node;
                 }
             }
-            println!("{:?}", found_components)
+            return node;
+        };
+
+        //let starting_tree = match tree {
+        //    Some(t) => {
+        //        let root = t.root_node();
+        //        let n = root.to_owned();
+        //        Some(n)
+        //    }
+        //    None => None,
+        //};
+        let mut root = Some(tree.root_node());
+        let mut last_key = "";
+        for k in split_keys {
+            root = find_node(root.unwrap(), content.as_bytes(), k);
+            last_key = k;
         }
+        let root = root.unwrap();
+        //let key = root.utf8_text(content.as_bytes()).unwrap();
+        //let mut cursor = root.walk();
+        //let mut children: Vec<String> = vec![];
+        //for child in root.children(&mut cursor) {
+        //    let text = child.utf8_text(content.as_bytes());
+        //    if let Ok(t) = text {
+        //        children.push(t.to_string())
+        //    }
+        //}
+
+        let query = create_children_query(last_key);
+        let query = Query::new(language(), &query).unwrap();
+        let mut qc = QueryCursor::new();
+        let mut children: Vec<String> = vec![];
+        for qm in qc.matches(&query, tree.root_node(), content.as_bytes()) {
+            match qm.captures.get(1) {
+                Some(capture) => {
+                    let text = capture.node.utf8_text(content.as_bytes());
+                    if let Ok(t) = text {
+                        children.push(t.to_string())
+                    }
+                }
+                None => (),
+            };
+        }
+
+        println!("{:?}", root.utf8_text(content.as_bytes()));
+        println!("{:?}", children);
 
         Ok(vec![])
     }
@@ -60,6 +110,21 @@ fn create_key_query(key: &str) -> String {
     return format!(
         r#"
             (block_mapping_pair key: ((flow_node) @key (eq? @key "{}")) value: (block_node) @value)
+            "#,
+        key
+    );
+}
+fn create_children_query(key: &str) -> String {
+    //(#match? @value "^\w+:")
+
+    return format!(
+        r#"
+            (block_mapping_pair
+             key: ((flow_node) @key (eq? @key "{}"))
+             value: (block_node (block_mapping (block_mapping_pair key: (flow_node) @child)
+                     )
+                 )
+             )
             "#,
         key
     );
@@ -106,6 +171,10 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/Pet'
+    Pats:
+      type: array
+      items:
+        $ref: '#/components/schemas/Pat'
         "#,
         )]);
 
