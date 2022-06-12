@@ -100,10 +100,10 @@ impl<'a, T: KeyFinderProvider> KeyFinder<'a> for TreeSitterKeyFinder<T> {
             };
         }
 
-        println!("{:?}", root.utf8_text(content.as_bytes()));
-        println!("{:?}", children);
+        //println!("{:?}", root.utf8_text(content.as_bytes()));
+        //println!("{:?}", children);
 
-        Ok(vec![])
+        Ok(children)
     }
 }
 fn create_key_query(key: &str) -> String {
@@ -195,7 +195,68 @@ components:
             responses: contents,
         };
         let finder = TreeSitterKeyFinder::new(PathBuf::new(), provider);
-        let children = finder.find_children_for_key("components.schemas");
+        let children = finder.find_children_for_key("components.schemas")?;
+        assert_eq!(children, vec!["Pets", "Pats"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_children_for_key_multifile() -> Result<(), Box<dyn Error>> {
+        let contents: HashMap<PathBuf, &'static str> = HashMap::from([
+            (
+                PathBuf::from("api.yaml"),
+                r#"
+paths:
+  /pets:
+    $ref: 'resources/pets.yaml'
+  /pets/{petId}:
+    $ref: 'resources/pet.yaml'
+        "#,
+            ),
+            (
+                PathBuf::from("resources/pets.yaml"),
+                r#"
+get:
+  summary: List
+  operationId: listPets
+  description: List all pets
+post:
+  summary: Create
+  operationId: createPets
+  description: Create a pet
+             "#,
+            ),
+            (
+                PathBuf::from("resources/pet.yaml"),
+                r#"
+get:
+  summary: Detail
+  operationId: showPetById
+  description: Info for a specific pet
+             "#,
+            ),
+        ]);
+
+        struct MockKeyFinderProvider {
+            responses: HashMap<PathBuf, &'static str>,
+        }
+        impl KeyFinderProvider for MockKeyFinderProvider {
+            fn get(&self, path: PathBuf) -> String {
+                if let Some(content) = self.responses.get(&path) {
+                    return content.to_string();
+                } else {
+                    "".to_string()
+                }
+            }
+        }
+
+        let provider = MockKeyFinderProvider {
+            responses: contents,
+        };
+        let finder = TreeSitterKeyFinder::new(PathBuf::new(), provider);
+        let children = finder.find_children_for_key("components.schemas")?;
+        assert_eq!(children, vec!["Pets", "Pats"]);
 
         Ok(())
     }
