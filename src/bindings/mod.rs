@@ -19,7 +19,7 @@ pub mod path;
 pub mod schema;
 use std::{collections::HashMap, path::PathBuf};
 
-use tree_sitter::{Language, Parser, Query, QueryCursor};
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, TreeCursor};
 
 extern "C" {
     fn tree_sitter_yaml() -> Language;
@@ -89,6 +89,25 @@ impl<T: ContentProvider> OperationParser for TreeSitterOperationParser<T> {
         let content = root_content.as_bytes();
 
         let mut entries: Vec<OperationNode> = vec![];
+        //let find_keys_and_context =
+        //    |key: String, context_node: Node, content: &[u8]| -> Vec<(String, TreeCursor)> {
+        //        let query = create_children_keys_query(&key);
+        //        let query = Query::new(language, &query).expect("Could not construct query");
+        //        let mut qc = QueryCursor::new();
+        //        let mut results: Vec<(String, TreeCursor)> = vec![];
+        //        for qm in qc.matches(&query, context_node, content) {
+        //            if let Some(child_key_capture) = qm.captures.get(2) {
+        //                if let Ok(key_text) = child_key_capture.node.utf8_text(content) {
+        //                    if let Some(child_value_capture) = qm.captures.get(3) {
+        //                        results
+        //                            .push((key_text.to_string(), child_value_capture.node.walk()))
+        //                    }
+        //                }
+        //            }
+        //        }
+
+        //        results
+        //    };
         for qm in qc.matches(&query, tree.root_node(), content).nth(0) {
             if let Some(_) = qm.captures.get(1) {
                 let paths_children_query = create_children_keys_query("paths");
@@ -98,30 +117,60 @@ impl<T: ContentProvider> OperationParser for TreeSitterOperationParser<T> {
                 let specific_paths: Vec<&str> = qc
                     .matches(&query, tree.root_node(), content)
                     .filter_map(|qm| {
-                        println!("qm? {:?}", qm.captures);
+                        println!(
+                            "qm? {:?}",
+                            qm.captures.get(0).unwrap().node.utf8_text(content)
+                        );
+                        let pair = (
+                            qm.captures.get(2).unwrap().node.utf8_text(content).unwrap(),
+                            qm.captures.get(1).unwrap().node,
+                        );
                         let mut result = None;
-                        for pair_iter in qm.captures.chunks_exact(2) {
-                            let pair = match pair_iter {
-                                &[key, value, ..] => {
-                                    (key.node.utf8_text(content).unwrap(), value.node)
+                        let query = create_children_keys_query(pair.0);
+                        let query =
+                            Query::new(language, &query).expect("Could not construct query");
+                        let mut qc = QueryCursor::new();
+                        let pairs_for_path: Vec<(&str, Node)> = qc
+                            .matches(&query, pair.1, content)
+                            .filter_map(|qm| {
+                                let mut pair = None;
+                                if let Some(cap) = qm.captures.get(2) {
+                                    if let Ok(t) = cap.node.utf8_text(content) {
+                                        pair = Some((t, qm.captures.get(3).unwrap().node))
+                                    }
                                 }
-                                _ => unreachable!(),
-                            };
-                            println!("pair? {:?}", pair);
-                            println!("value node? {:?}", pair.1.utf8_text(content));
-
-                            result = Some(pair.0);
-                            let query = create_children_query(pair.0);
-                            let query =
-                                Query::new(language, &query).expect("Could not construct query");
-                            let mut qc = QueryCursor::new();
-                            for qm in qc.matches(&query, pair.1.parent().unwrap(), content) {
-                                println!(
-                                    "pairs? {:?}",
-                                    qm.captures.get(0).unwrap().node.utf8_text(content)
-                                )
-                            }
+                                pair
+                            })
+                            .collect();
+                        if pairs_for_path.iter().any(|pair| pair.0.eq("$ref")) {
+                            // follow ref
+                            //println!("contains ref {:?}", pair);
+                            //let query = create_children_keys_query(key)
+                        } else {
                         }
+
+                        //for pair_iter in qm.captures.chunks_exact(2) {
+                        //    let pair = match pair_iter {
+                        //        &[key, value, ..] => {
+                        //            (key.node.utf8_text(content).unwrap(), value.node)
+                        //        }
+                        //        _ => unreachable!(),
+                        //    };
+                        //    println!("pair? {:?}", pair);
+                        //    println!("value node? {:?}", pair.1.utf8_text(content));
+
+                        //    result = Some(pair.0);
+                        //    let query = create_children_query(pair.0);
+                        //    let query =
+                        //        Query::new(language, &query).expect("Could not construct query");
+                        //    let mut qc = QueryCursor::new();
+                        //    for qm in qc.matches(&query, pair.1.parent().unwrap(), content) {
+                        //        println!(
+                        //            "pairs? {:?}",
+                        //            qm.captures.get(0).unwrap().node.utf8_text(content)
+                        //        )
+                        //    }
+                        //}
                         result
                     })
                     .collect::<Vec<_>>();
@@ -197,9 +246,12 @@ fn create_children_keys_query(key: &str) -> String {
         r#"
             (block_mapping_pair
              key: ((flow_node) @key (eq? @key "{}"))
-             value: (block_node (block_mapping (block_mapping_pair key: (flow_node) @child)
+             value: (block_node (block_mapping (block_mapping_pair key: (flow_node) @childkey value: [
+                         (flow_node) @childvalue
+                         (block_node) @childvalue
+             ])
                      )
-                 )
+                 ) @value
              )
             "#,
         key
