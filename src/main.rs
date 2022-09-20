@@ -6,6 +6,7 @@ use bindings::{
 use clap::{Args, Parser, Subcommand};
 
 mod bindings;
+mod content;
 mod error;
 mod operation;
 mod path;
