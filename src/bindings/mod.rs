@@ -17,7 +17,12 @@
 
 pub mod path;
 pub mod schema;
+
+use std::{collections::HashMap, path::PathBuf};
 use tree_sitter::{Language, Parser, Query, QueryCursor};
+
+#[cfg(test)]
+use mocktopus::macros::mockable;
 
 extern "C" {
     fn tree_sitter_yaml() -> Language;
@@ -28,6 +33,44 @@ extern "C" {
 /// [Language]: https://docs.rs/tree-sitter/*/tree_sitter/struct.Language.html
 pub fn language() -> Language {
     unsafe { tree_sitter_yaml() }
+}
+
+#[cfg_attr(test, mockable)]
+pub fn find_refs(content: &str) -> Vec<String> {
+    let mut results: Vec<String> = vec![];
+
+    let refs_query = create_ref_query();
+    let mut parser = Parser::new();
+    let language = language();
+    parser.set_language(language).unwrap();
+    let tree = parser.parse(content, None).unwrap();
+    let query = Query::new(language, &refs_query).expect("Could not construct query");
+    let mut qc = QueryCursor::new();
+    let provider = content.as_bytes();
+
+    for qm in qc.matches(&query, tree.root_node(), provider) {
+        for cap in qm.captures {
+            if query.capture_names()[cap.index as usize] == "value" {
+                if let Ok(text) = cap.node.utf8_text(provider) {
+                    results.push(text.replace("'", "").replace("\"", ""));
+                }
+            }
+        }
+    }
+    results
+}
+
+fn create_ref_query() -> String {
+    // Values can either be `block_node` or `flow_node`. It seems like if the
+    // child doesn't have children it's a `flow_node`. Since `$ref` should never
+    // have children it will always be a `flow_node`. Something like `components`
+    // would probably be a block_node.
+
+    return format!(
+        r#"
+            (block_mapping_pair key: ((flow_node) @key (#eq? @key "$ref")) value: (flow_node) @value)
+            "#
+    );
 }
 
 #[derive(Clone, Debug)]
@@ -151,6 +194,8 @@ mod tests {
 
     use crate::bindings::{OperationParser, TreeSitterOperationParser};
 
+    use super::find_refs;
+
     #[test]
     fn test_can_load_grammar() {
         let mut parser = tree_sitter::Parser::new();
@@ -207,6 +252,38 @@ paths:
             node_texts,
             "Returned operations did not match expected operations"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_find_refs() -> Result<(), Box<dyn Error>> {
+        let content = r#"
+openapi: '3.0.0'
+info:
+  version: 1.0.0
+  title: Swagger Petstore
+  description: Multi-file boilerplate for OpenAPI Specification.
+  license:
+    name: MIT
+  contact:
+    name: API Support
+    url: http://www.example.com/support
+    email: support@example.com
+servers:
+  - url: http://petstore.swagger.io/v1
+tags:
+  - name: pets
+paths:
+  /pets:
+    $ref: 'resources/pets.yaml'
+  /pets/{petId}:
+    $ref: 'resources/pet.yaml'
+                "#;
+        let refs = find_refs(content);
+        assert_eq!(refs.len(), 2);
+        assert!(refs.contains(&String::from("resources/pets.yaml")));
+        assert!(refs.contains(&String::from("resources/pet.yaml")));
+
         Ok(())
     }
 }
