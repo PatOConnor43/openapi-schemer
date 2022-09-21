@@ -19,6 +19,8 @@ pub mod operation;
 pub mod path;
 pub mod schema;
 
+use std::collections::HashMap;
+
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 #[cfg(test)]
@@ -111,6 +113,42 @@ fn create_yaml_context_query(parent_key: &str) -> String {
         "#,
         parent_key
     );
+}
+
+fn get_top_level_keys(content: &[u8]) -> ChildrenOrRef {
+    let language = language();
+    let mut parser = Parser::new();
+    parser.set_language(language).unwrap();
+    let tree = parser.parse(content.to_owned(), None).unwrap();
+    let query = create_top_level_yaml_context_query();
+    let query = Query::new(language, &query).expect("Could not construct query");
+    let mut qc = QueryCursor::new();
+
+    let mut results: HashMap<String, String> = HashMap::new();
+
+    for qm in qc.matches(&query, tree.root_node(), content) {
+        let child_key_index = query.capture_index_for_name("child-key").unwrap();
+        let child_context_index = query.capture_index_for_name("child-context").unwrap();
+        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
+        if let Ok(key_text) = child_key_node.utf8_text(content) {
+            let parent_context_node = qm
+                .nodes_for_capture_index(child_context_index)
+                .last()
+                .unwrap();
+            results.insert(
+                key_text.to_string(),
+                parent_context_node.utf8_text(content).unwrap().to_string(),
+            );
+        }
+    }
+
+    ChildrenOrRef::Children(results)
+}
+
+#[derive(Debug)]
+pub enum ChildrenOrRef {
+    Children(HashMap<String, String>),
+    Ref(String),
 }
 
 #[derive(Clone, Debug)]

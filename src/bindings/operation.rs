@@ -4,7 +4,7 @@ use tree_sitter::{Parser, Query, QueryCursor};
 
 use crate::content::ContentProvider;
 
-use super::{language, OperationParser};
+use super::{get_top_level_keys, language, ChildrenOrRef, OperationParser};
 
 pub struct TreeSitterOperationParser2 {
     provider: Box<dyn ContentProvider>,
@@ -27,8 +27,8 @@ impl OperationParser for TreeSitterOperationParser2 {
             paths_children = get_top_level_keys(content.as_bytes());
         }
         match paths_children {
-            ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
-            ChildrenOrRef::Children(children) => {
+            super::ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
+            super::ChildrenOrRef::Children(children) => {
                 for (path, context) in children {
                     let mut methods = get_children_by_key(path.as_ref(), context.as_bytes());
                     if let ChildrenOrRef::Ref(r) = methods {
@@ -36,10 +36,10 @@ impl OperationParser for TreeSitterOperationParser2 {
                         methods = get_top_level_keys(content.as_bytes());
                     }
                     match methods {
-                        ChildrenOrRef::Ref(_) => {
+                        super::ChildrenOrRef::Ref(_) => {
                             panic!("Found $ref when following $ref. Aborting.")
                         }
-                        ChildrenOrRef::Children(children) => {
+                        super::ChildrenOrRef::Children(children) => {
                             for (operation, context) in children {
                                 let mut operation_child_keys =
                                     get_children_by_key(operation.as_ref(), context.as_bytes());
@@ -48,10 +48,10 @@ impl OperationParser for TreeSitterOperationParser2 {
                                     operation_child_keys = get_top_level_keys(content.as_bytes());
                                 }
                                 match operation_child_keys {
-                                    ChildrenOrRef::Ref(_) => {
+                                    super::ChildrenOrRef::Ref(_) => {
                                         panic!("Found $ref when following $ref. Aborting.")
                                     }
-                                    ChildrenOrRef::Children(children) => {
+                                    super::ChildrenOrRef::Children(children) => {
                                         // This base case looks pretty gross and maybe it is, but the
                                         // resulting value of children["operationId"] is the string
                                         // "operationId: <whatever>". So I just do some string
@@ -78,65 +78,7 @@ impl OperationParser for TreeSitterOperationParser2 {
     }
 }
 
-fn get_top_level_keys(content: &[u8]) -> ChildrenOrRef {
-    let language = language();
-    let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
-    let tree = parser.parse(content.to_owned(), None).unwrap();
-    let query = super::create_top_level_yaml_context_query();
-    let query = Query::new(language, &query).expect("Could not construct query");
-    let mut qc = QueryCursor::new();
-
-    let mut results: HashMap<String, String> = HashMap::new();
-
-    for qm in qc.matches(&query, tree.root_node(), content) {
-        let child_key_index = query.capture_index_for_name("child-key").unwrap();
-        let child_context_index = query.capture_index_for_name("child-context").unwrap();
-        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
-        if let Ok(key_text) = child_key_node.utf8_text(content) {
-            let parent_context_node = qm
-                .nodes_for_capture_index(child_context_index)
-                .last()
-                .unwrap();
-            results.insert(
-                key_text.to_string(),
-                parent_context_node.utf8_text(content).unwrap().to_string(),
-            );
-        }
-    }
-
-    ChildrenOrRef::Children(results)
-}
-
-fn get_operation_id_by_parent(parent: &str, content: &[u8]) -> Option<String> {
-    let language = language();
-    let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
-    let tree = parser.parse(content.to_owned(), None).unwrap();
-    let query = super::create_yaml_context_query(parent);
-    let query = Query::new(language, &query).expect("Could not construct query");
-    let mut qc = QueryCursor::new();
-    for qm in qc.matches(&query, tree.root_node(), content) {
-        let child_key_index = query.capture_index_for_name("child-key").unwrap();
-        let child_value_index = query.capture_index_for_name("child-value").unwrap();
-        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
-        if let Ok(key_text) = child_key_node.utf8_text(content) {
-            if key_text == "operationId" {
-                let child_value_node_text = qm
-                    .nodes_for_capture_index(child_value_index)
-                    .last()
-                    .unwrap()
-                    .utf8_text(content)
-                    .unwrap();
-                return Some(child_value_node_text.to_owned());
-            }
-        }
-    }
-
-    None
-}
-
-fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
+fn get_children_by_key(key: &str, content: &[u8]) -> super::ChildrenOrRef {
     let language = language();
     let mut parser = Parser::new();
     parser.set_language(language).unwrap();
@@ -163,7 +105,7 @@ fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
                     // Prevent weird file names by removing quotes
                     .replace("'", "")
                     .replace("\"", "");
-                return ChildrenOrRef::Ref(child_value_node_text.to_owned());
+                return super::ChildrenOrRef::Ref(child_value_node_text.to_owned());
             }
             let parent_context_node = qm
                 .nodes_for_capture_index(child_context_index)
@@ -176,13 +118,7 @@ fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
         }
     }
 
-    ChildrenOrRef::Children(results)
-}
-
-#[derive(Debug)]
-enum ChildrenOrRef {
-    Children(HashMap<String, String>),
-    Ref(String),
+    super::ChildrenOrRef::Children(results)
 }
 
 #[cfg(test)]
@@ -194,7 +130,7 @@ mod tests {
     use mocktopus::mocking::MockResult;
     use mocktopus::mocking::Mockable;
 
-    use crate::bindings::OperationParser;
+    use crate::bindings::{ChildrenOrRef, OperationParser};
     use crate::content::ContentProvider;
     use crate::content::ContentProviderMap;
 
@@ -327,12 +263,12 @@ test:
                 .as_bytes(),
         );
         return match results {
-            super::ChildrenOrRef::Children(children) => {
+            ChildrenOrRef::Children(children) => {
                 assert!(children.get("test1").unwrap() == "test1:\n    description: yes");
                 assert!(children.get("test2").unwrap() == "test2:\n    description: no");
                 Ok(())
             }
-            super::ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
+            ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
         };
     }
 
@@ -350,10 +286,10 @@ test:
                 .as_bytes(),
         );
         return match results {
-            super::ChildrenOrRef::Children(_) => {
+            ChildrenOrRef::Children(_) => {
                 panic!("Test should have returned Ref enum")
             }
-            super::ChildrenOrRef::Ref(r) => {
+            ChildrenOrRef::Ref(r) => {
                 assert!(r == "#/fake/ref");
                 Ok(())
             }
@@ -375,7 +311,7 @@ test:
                 .as_bytes(),
         );
         return match results {
-            super::ChildrenOrRef::Children(children) => {
+            ChildrenOrRef::Children(children) => {
                 assert_eq!(
                     children.get("test1").unwrap(),
                     "test1:\n    description: yes"
@@ -390,7 +326,7 @@ test:
                 );
                 Ok(())
             }
-            super::ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
+            ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
         };
     }
 }
