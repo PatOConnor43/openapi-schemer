@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, io::Read, path::PathBuf, rc::Rc, str::FromStr};
+use std::{collections::HashMap, fs::File, io::Read, path::PathBuf};
 
 use crate::bindings;
 
@@ -7,15 +7,17 @@ use mocktopus::macros::mockable;
 
 #[cfg_attr(test, mockable)]
 pub trait ContentProvider {
-    fn get(&self, path: PathBuf) -> String;
+    fn get_content(&self, path: PathBuf) -> String;
     fn paths(&self) -> Vec<&PathBuf>;
 }
 
+#[cfg_attr(test, mockable)]
 pub struct ContentProviderMap {
     contents: HashMap<PathBuf, String>,
     root_file: PathBuf,
 }
 
+#[cfg_attr(test, mockable)]
 impl ContentProviderMap {
     pub fn new() -> Self {
         ContentProviderMap {
@@ -46,7 +48,7 @@ impl ContentProviderMap {
             let mut path = PathBuf::new();
             path.push(working_directory);
             path.push(reference);
-            let path = ::std::fs::canonicalize(path);
+            let path = canonicalize(path);
             let path = path.unwrap();
             let content = get_content_for_path(path.to_owned());
             backing_map.insert(path, content);
@@ -69,8 +71,14 @@ fn get_content_for_path(path: PathBuf) -> String {
     content
 }
 
+#[cfg_attr(test, mockable)]
+fn canonicalize(path: PathBuf) -> Result<PathBuf, ::std::io::Error> {
+    ::std::fs::canonicalize(path)
+}
+
+#[cfg_attr(test, mockable)]
 impl ContentProvider for ContentProviderMap {
-    fn get(&self, path: PathBuf) -> String {
+    fn get_content(&self, path: PathBuf) -> String {
         if path == PathBuf::from("#") {
             return self.contents.get(&self.root_file).unwrap().to_owned();
         }
@@ -79,7 +87,7 @@ impl ContentProvider for ContentProviderMap {
         let mut full_path = PathBuf::new();
         full_path.push(root_directory);
         full_path.push(path);
-        let full_path = ::std::fs::canonicalize(full_path).unwrap();
+        let full_path = canonicalize(full_path).unwrap();
         return self.contents.get(&full_path).unwrap().to_owned();
     }
 
@@ -134,16 +142,17 @@ components:
           type: string
                 "#;
         super::get_content_for_path.mock_safe(|_| MockResult::Return(content.to_string()));
+        super::canonicalize.mock_safe(move |path: PathBuf| MockResult::Return(Ok(path)));
         bindings::find_refs.mock_safe(|_| MockResult::Return(vec![]));
 
-        let fully_qualified_path = PathBuf::new();
+        let fully_qualified_path = PathBuf::from("/test/test.yaml");
         let short_root_path = PathBuf::from("#");
         let provider = ContentProviderMap::from_open_api_yaml(fully_qualified_path.to_owned());
         assert_eq!(provider.paths().len(), 2);
         assert!(provider.paths().contains(&&fully_qualified_path));
         assert!(provider.paths().contains(&&short_root_path));
-        assert_eq!(provider.get(fully_qualified_path), content);
-        assert_eq!(provider.get(short_root_path), content);
+        assert_eq!(provider.get_content(fully_qualified_path), content);
+        assert_eq!(provider.get_content(short_root_path), content);
     }
 
     #[test]
@@ -179,10 +188,10 @@ paths:
 # resources/pet.yaml
           "#
         .to_owned();
-        let root_path = PathBuf::new();
+        let root_path = PathBuf::from("/test/test.yaml");
         let short_root_path = PathBuf::from("#");
-        let pets_path = PathBuf::from("resources/pets.yaml");
-        let pet_path = PathBuf::from("resources/pet.yaml");
+        let pets_path = PathBuf::from("/test/resources/pets.yaml");
+        let pet_path = PathBuf::from("/test/resources/pet.yaml");
         let content_map = HashMap::from([
             (root_path.to_owned(), root_content.to_owned()),
             (pets_path.to_owned(), pets_content.to_owned()),
@@ -192,6 +201,8 @@ paths:
             let s = content_map.get(&path).unwrap();
             MockResult::Return(s.to_owned())
         });
+
+        super::canonicalize.mock_safe(move |path: PathBuf| MockResult::Return(Ok(path)));
 
         bindings::find_refs.mock_safe(|_| {
             MockResult::Return(vec![
@@ -206,8 +217,8 @@ paths:
         assert!(provider.paths().contains(&&short_root_path));
         assert!(provider.paths().contains(&&pets_path));
         assert!(provider.paths().contains(&&pet_path));
-        assert_eq!(provider.get(root_path), root_content);
-        assert_eq!(provider.get(pets_path), pets_content);
-        assert_eq!(provider.get(pet_path), pet_content);
+        assert_eq!(provider.get_content(root_path), root_content);
+        assert_eq!(provider.get_content(pets_path), pets_content);
+        assert_eq!(provider.get_content(pet_path), pet_content);
     }
 }

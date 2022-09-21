@@ -18,12 +18,12 @@ impl<'a> TreeSitterOperationParser2 {
 
 impl OperationParser for TreeSitterOperationParser2 {
     fn get_operation_nodes(&self) -> Vec<super::OperationNode> {
-        let content = self.provider.get(PathBuf::from("#"));
+        let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<super::OperationNode> = vec![];
 
         let mut paths_children = get_children_by_key("paths", content.as_bytes());
         if let ChildrenOrRef::Ref(r) = paths_children {
-            let content = self.provider.get(PathBuf::from(r));
+            let content = self.provider.get_content(PathBuf::from(r));
             paths_children = get_top_level_keys(content.as_bytes());
         }
         match paths_children {
@@ -32,7 +32,7 @@ impl OperationParser for TreeSitterOperationParser2 {
                 for (path, context) in children {
                     let mut methods = get_children_by_key(path.as_ref(), context.as_bytes());
                     if let ChildrenOrRef::Ref(r) = methods {
-                        let content = self.provider.get(PathBuf::from(r));
+                        let content = self.provider.get_content(PathBuf::from(r));
                         methods = get_top_level_keys(content.as_bytes());
                     }
                     match methods {
@@ -44,7 +44,7 @@ impl OperationParser for TreeSitterOperationParser2 {
                                 let mut operation_child_keys =
                                     get_children_by_key(operation.as_ref(), context.as_bytes());
                                 if let ChildrenOrRef::Ref(r) = operation_child_keys {
-                                    let content = self.provider.get(PathBuf::from(r));
+                                    let content = self.provider.get_content(PathBuf::from(r));
                                     operation_child_keys = get_top_level_keys(content.as_bytes());
                                 }
                                 match operation_child_keys {
@@ -191,7 +191,11 @@ mod tests {
     use std::error::Error;
     use std::path::PathBuf;
 
+    use mocktopus::mocking::MockResult;
+    use mocktopus::mocking::Mockable;
+
     use crate::bindings::OperationParser;
+    use crate::content::ContentProvider;
     use crate::content::ContentProviderMap;
 
     use super::TreeSitterOperationParser2;
@@ -244,8 +248,12 @@ paths:
             (root_path, root_content.to_owned()),
             (paths_path, paths_content.to_owned()),
         ]);
-        let provider = Box::new(ContentProviderMap::from_map(contents));
-        let parser = TreeSitterOperationParser2::new(provider);
+        ContentProviderMap::get_content.mock_safe(move |_, path: PathBuf| {
+            MockResult::Return(contents.get(&path).unwrap().to_owned())
+        });
+        let provider = ContentProviderMap::new();
+        let box_provider = Box::new(provider);
+        let parser = TreeSitterOperationParser2::new(box_provider);
         let nodes = parser.get_operation_nodes();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
@@ -290,8 +298,14 @@ operationId: createPets
             (pets_get_path, pets_get_content.to_owned()),
             (pets_post_path, pets_post_content.to_owned()),
         ]);
-        let provider = Box::new(ContentProviderMap::from_map(contents));
-        let parser = TreeSitterOperationParser2::new(provider);
+
+        ContentProviderMap::get_content.mock_safe(move |_, path: PathBuf| {
+            MockResult::Return(contents.get(&path).unwrap().to_owned())
+        });
+
+        let provider = ContentProviderMap::new();
+        let box_provider = Box::new(provider);
+        let parser = TreeSitterOperationParser2::new(box_provider);
         let nodes = parser.get_operation_nodes();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
@@ -340,7 +354,7 @@ test:
                 panic!("Test should have returned Ref enum")
             }
             super::ChildrenOrRef::Ref(r) => {
-                assert!(r == "'#/fake/ref'");
+                assert!(r == "#/fake/ref");
                 Ok(())
             }
         };
@@ -362,9 +376,18 @@ test:
         );
         return match results {
             super::ChildrenOrRef::Children(children) => {
-                assert!(children.get("test1").unwrap() == "test1:\n    description: yes");
-                assert!(children.get("test2").unwrap() == "test2:\n    description: no");
-                assert!(children.get("test3").unwrap() == "test3:\n    $ref: '#/fake/ref'");
+                assert_eq!(
+                    children.get("test1").unwrap(),
+                    "test1:\n    description: yes"
+                );
+                assert_eq!(
+                    children.get("test2").unwrap(),
+                    "test2:\n    description: no"
+                );
+                assert_eq!(
+                    children.get("test3").unwrap(),
+                    "test3:\n    $ref: '#/fake/ref'"
+                );
                 Ok(())
             }
             super::ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
