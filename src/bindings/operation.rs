@@ -1,16 +1,14 @@
-use std::{collections::HashMap, path::PathBuf};
-
-use tree_sitter::{Parser, Query, QueryCursor};
+use std::path::PathBuf;
 
 use crate::content::ContentProvider;
 
-use super::{get_top_level_keys, language, ChildrenOrRef, OperationParser};
+use super::{get_children_by_key, get_top_level_keys, ChildrenOrRef, OperationParser};
 
 pub struct TreeSitterOperationParser2 {
     provider: Box<dyn ContentProvider>,
 }
 
-impl<'a> TreeSitterOperationParser2 {
+impl TreeSitterOperationParser2 {
     pub fn new(provider: Box<dyn ContentProvider>) -> Self {
         Self { provider }
     }
@@ -76,49 +74,6 @@ impl OperationParser for TreeSitterOperationParser2 {
         }
         results
     }
-}
-
-fn get_children_by_key(key: &str, content: &[u8]) -> super::ChildrenOrRef {
-    let language = language();
-    let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
-    let tree = parser.parse(content.to_owned(), None).unwrap();
-    let query = super::create_yaml_context_query(key);
-    let query = Query::new(language, &query).expect("Could not construct query");
-    let mut qc = QueryCursor::new();
-
-    let mut results: HashMap<String, String> = HashMap::new();
-
-    for qm in qc.matches(&query, tree.root_node(), content) {
-        let child_key_index = query.capture_index_for_name("child-key").unwrap();
-        let child_value_index = query.capture_index_for_name("child-value").unwrap();
-        let child_context_index = query.capture_index_for_name("child-context").unwrap();
-        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
-        if let Ok(key_text) = child_key_node.utf8_text(content) {
-            if key_text == "$ref" {
-                let child_value_node_text = qm
-                    .nodes_for_capture_index(child_value_index)
-                    .last()
-                    .unwrap()
-                    .utf8_text(content)
-                    .unwrap()
-                    // Prevent weird file names by removing quotes
-                    .replace("'", "")
-                    .replace("\"", "");
-                return super::ChildrenOrRef::Ref(child_value_node_text.to_owned());
-            }
-            let parent_context_node = qm
-                .nodes_for_capture_index(child_context_index)
-                .last()
-                .unwrap();
-            results.insert(
-                key_text.to_string(),
-                parent_context_node.utf8_text(content).unwrap().to_string(),
-            );
-        }
-    }
-
-    super::ChildrenOrRef::Children(results)
 }
 
 #[cfg(test)]
