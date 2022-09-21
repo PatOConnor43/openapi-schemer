@@ -73,6 +73,23 @@ fn create_ref_query() -> String {
     );
 }
 
+fn create_top_level_yaml_context_query() -> String {
+    return format!(
+        r#"
+        (document
+         (block_node
+          (block_mapping
+           (block_mapping_pair
+            key: (flow_node) @child-key
+            value: [(flow_node)(block_node)] @child-value
+           ) @child-context
+          )
+         )
+        )
+        "#
+    );
+}
+
 fn create_yaml_context_query(parent_key: &str) -> String {
     return format!(
         r#"

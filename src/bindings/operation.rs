@@ -41,11 +41,66 @@ impl OperationParser for TreeSitterOperationParser2 {
                     }
                 }
             }
-            ChildrenOrRef::Ref(_) => todo!(),
+            ChildrenOrRef::Ref(r) => {
+                let content = self.provider.get(PathBuf::from(r));
+
+                let paths_children = get_top_level_keys(content.as_bytes());
+                match paths_children {
+                    ChildrenOrRef::Children(children) => {
+                        for (path, context) in children {
+                            let methods = get_children_by_key(path.as_ref(), context.as_bytes());
+                            match methods {
+                                ChildrenOrRef::Children(children) => {
+                                    for (operation, context) in children {
+                                        let operation = get_operation_id_by_parent(
+                                            operation.as_ref(),
+                                            context.as_bytes(),
+                                        )
+                                        .unwrap();
+                                        results.push(super::OperationNode { text: operation })
+                                    }
+                                }
+                                ChildrenOrRef::Ref(_) => todo!(),
+                            }
+                        }
+                    }
+                    ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
+                }
+            }
         }
 
         results
     }
+}
+
+fn get_top_level_keys(content: &[u8]) -> ChildrenOrRef {
+    let language = language();
+    let mut parser = Parser::new();
+    parser.set_language(language).unwrap();
+    let tree = parser.parse(content.to_owned(), None).unwrap();
+    let query = super::create_top_level_yaml_context_query();
+    let query = Query::new(language, &query).expect("Could not construct query");
+    let mut qc = QueryCursor::new();
+
+    let mut results: HashMap<String, String> = HashMap::new();
+
+    for qm in qc.matches(&query, tree.root_node(), content) {
+        let child_key_index = query.capture_index_for_name("child-key").unwrap();
+        let child_context_index = query.capture_index_for_name("child-context").unwrap();
+        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
+        if let Ok(key_text) = child_key_node.utf8_text(content) {
+            let parent_context_node = qm
+                .nodes_for_capture_index(child_context_index)
+                .last()
+                .unwrap();
+            results.insert(
+                key_text.to_string(),
+                parent_context_node.utf8_text(content).unwrap().to_string(),
+            );
+        }
+    }
+
+    ChildrenOrRef::Children(results)
 }
 
 fn get_operation_id_by_parent(parent: &str, content: &[u8]) -> Option<String> {
@@ -137,8 +192,6 @@ mod tests {
     fn get_operation_nodes() -> Result<(), Box<dyn Error>> {
         let root_path = PathBuf::from("#");
         let root_content = r#"
-servers:
-  - url: http://petstore.swagger.io/v1
 paths:
   /pets:
     get:
@@ -149,6 +202,40 @@ paths:
       operationId: createPets
             "#;
         let contents = HashMap::from([(root_path, root_content.to_owned())]);
+        let provider = Box::new(ContentProviderMap::from_map(contents));
+        let parser = TreeSitterOperationParser2::new(provider);
+        let nodes = parser.get_operation_nodes();
+        let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
+        assert!(operation_ids.contains(&String::from("listPets")));
+        assert!(operation_ids.contains(&String::from("createPets")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_operation_nodes_with_ref() -> Result<(), Box<dyn Error>> {
+        let root_path = PathBuf::from("#");
+        let paths_path = PathBuf::from("Paths.yaml");
+
+        let root_content = r#"
+paths:
+  $ref: Paths.yaml
+            "#;
+
+        let paths_content = r#"
+# Paths.yaml
+/pets:
+    get:
+      summary: List all pets
+      operationId: listPets
+    post:
+      summary: Create a pet
+      operationId: createPets
+            "#;
+        let contents = HashMap::from([
+            (root_path, root_content.to_owned()),
+            (paths_path, paths_content.to_owned()),
+        ]);
         let provider = Box::new(ContentProviderMap::from_map(contents));
         let parser = TreeSitterOperationParser2::new(provider);
         let nodes = parser.get_operation_nodes();
