@@ -19,7 +19,6 @@ pub mod operation;
 pub mod path;
 pub mod schema;
 
-use std::{collections::HashMap, path::PathBuf};
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 #[cfg(test)]
@@ -74,33 +73,23 @@ fn create_ref_query() -> String {
     );
 }
 
-fn create_key_query(key: &str) -> String {
-    // Allow values to be block or flow. Callers can disambiguate by the type if they care.
-    return format!(
-        r#"
-            (block_mapping_pair key: ((flow_node) @query-key (#eq? @query-key "{}")) value: [(flow_node)(block_node)] @query-value)
-            "#,
-        key
-    );
-}
-
-fn create_children_keys_query(parent_key: &str) -> String {
+fn create_yaml_context_query(parent_key: &str) -> String {
     return format!(
         r#"
         (
             (block_mapping_pair
-             key: (flow_node) @key-name
+             key: (flow_node) @parent-key
              value: (
                  block_node (
                      block_mapping (
                          block_mapping_pair
                          key: (flow_node) @child-key
                          value: [(flow_node)(block_node)] @child-value
-                     )
+                     ) @child-context
                  )
-             ) @key-content
-            )
-            (#eq? @key-name "{}")
+             ) @parent-value
+            ) @parent-context
+            (#eq? @parent-key "{}")
         )
         "#,
         parent_key
@@ -228,7 +217,7 @@ mod tests {
 
     use crate::bindings::{OperationParser, TreeSitterOperationParser};
 
-    use super::{create_key_query, find_refs};
+    use super::find_refs;
 
     #[test]
     fn test_can_load_grammar() {

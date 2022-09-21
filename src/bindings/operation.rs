@@ -19,100 +19,107 @@ impl<'a> TreeSitterOperationParser2 {
 impl OperationParser for TreeSitterOperationParser2 {
     fn get_operation_nodes(&self) -> Vec<super::OperationNode> {
         let content = self.provider.get(PathBuf::from("#"));
+        let mut results: Vec<super::OperationNode> = vec![];
 
-        let refs_query = super::create_key_query("paths");
-        let mut parser = Parser::new();
-        let language = language();
-        parser.set_language(language).unwrap();
-        let tree = parser.parse(content.to_owned(), None).unwrap();
-        let query = Query::new(language, &refs_query).expect("Could not construct query");
-        let mut qc = QueryCursor::new();
-        let provider = content.as_bytes();
-
-        for qm in qc.matches(&query, tree.root_node(), provider) {
-            for cap in qm.captures {
-                if query.capture_names()[cap.index as usize] == "query-value" {
-                    let paths_query = Query::new(
-                        language,
-                        r#"
-                      (
-                        (block_mapping_pair
-                         key: (flow_node) @key-name
-                         value: (
-                           block_node (
-                             block_mapping (
-                               block_mapping_pair key: (flow_node) @paths-child-value
-                             )
-                           )
-                         )
-                        )
-                        (#eq? @key-name "paths")
-                      )
-                    "#,
-                    )
-                    .unwrap();
-                    let mut qc = QueryCursor::new();
-                    let mut paths: Vec<String> = Vec::new();
-                    for qm in qc.matches(&paths_query, tree.root_node(), provider) {
-                        for cap in qm.captures {
-                            if paths_query.capture_names()[cap.index as usize]
-                                == "paths-child-value"
-                            {
-                                paths.push(cap.node.utf8_text(provider).unwrap().to_owned())
+        let paths_children = get_children_by_key("paths", content.as_bytes());
+        match paths_children {
+            ChildrenOrRef::Children(children) => {
+                for (path, context) in children {
+                    let methods = get_children_by_key(path.as_ref(), context.as_bytes());
+                    match methods {
+                        ChildrenOrRef::Children(children) => {
+                            for (operation, context) in children {
+                                let operation = get_operation_id_by_parent(
+                                    operation.as_ref(),
+                                    context.as_bytes(),
+                                )
+                                .unwrap();
+                                results.push(super::OperationNode { text: operation })
                             }
                         }
-                    }
-                    println!("{:?}", paths);
-                    if paths.contains(&String::from("$ref")) {
-                        // Open the ref'd content from the provider
-                        todo!()
-                    } else {
-                        let methods_by_path = get_methods_by_path(&paths, content.to_owned());
-                        println!("{:?}", methods_by_path);
+                        ChildrenOrRef::Ref(_) => todo!(),
                     }
                 }
             }
+            ChildrenOrRef::Ref(_) => todo!(),
         }
 
-        vec![]
+        results
     }
 }
 
-fn get_methods_by_path(paths: &[String], content: String) -> HashMap<String, Vec<String>> {
-    let mut results: HashMap<String, Vec<String>> = HashMap::new();
-
-    let mut parser = Parser::new();
+fn get_operation_id_by_parent(parent: &str, content: &[u8]) -> Option<String> {
     let language = language();
+    let mut parser = Parser::new();
     parser.set_language(language).unwrap();
     let tree = parser.parse(content.to_owned(), None).unwrap();
-
-    for path in paths {
-        // Add a default vec
-        results.insert(path.to_owned(), Vec::new());
-
-        let query = super::create_children_keys_query(path);
-        let query = Query::new(language, &query).expect("Could not construct query");
-        let mut qc = QueryCursor::new();
-        let provider = content.as_bytes();
-
-        for qm in qc.matches(&query, tree.root_node(), provider) {
-            for cap in qm.captures {
-                if query.capture_names()[cap.index as usize] == "child-key" {
-                    let text = cap.node.utf8_text(provider).unwrap();
-                    if [
-                        "get", "post", "put", "delete", "options", "head", "patch", "connect",
-                        "trace",
-                    ]
-                    .contains(&text)
-                    {
-                        results.get_mut(path).unwrap().push(text.to_owned())
-                    }
-                }
+    let query = super::create_yaml_context_query(parent);
+    let query = Query::new(language, &query).expect("Could not construct query");
+    let mut qc = QueryCursor::new();
+    for qm in qc.matches(&query, tree.root_node(), content) {
+        let child_key_index = query.capture_index_for_name("child-key").unwrap();
+        let child_value_index = query.capture_index_for_name("child-value").unwrap();
+        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
+        if let Ok(key_text) = child_key_node.utf8_text(content) {
+            if key_text == "operationId" {
+                let child_value_node_text = qm
+                    .nodes_for_capture_index(child_value_index)
+                    .last()
+                    .unwrap()
+                    .utf8_text(content)
+                    .unwrap();
+                return Some(child_value_node_text.to_owned());
             }
         }
     }
 
-    results
+    None
+}
+
+fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
+    let language = language();
+    let mut parser = Parser::new();
+    parser.set_language(language).unwrap();
+    let tree = parser.parse(content.to_owned(), None).unwrap();
+    let query = super::create_yaml_context_query(key);
+    let query = Query::new(language, &query).expect("Could not construct query");
+    let mut qc = QueryCursor::new();
+
+    let mut results: HashMap<String, String> = HashMap::new();
+
+    for qm in qc.matches(&query, tree.root_node(), content) {
+        let child_key_index = query.capture_index_for_name("child-key").unwrap();
+        let child_value_index = query.capture_index_for_name("child-value").unwrap();
+        let child_context_index = query.capture_index_for_name("child-context").unwrap();
+        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
+        if let Ok(key_text) = child_key_node.utf8_text(content) {
+            if key_text == "$ref" {
+                let child_value_node_text = qm
+                    .nodes_for_capture_index(child_value_index)
+                    .last()
+                    .unwrap()
+                    .utf8_text(content)
+                    .unwrap();
+                return ChildrenOrRef::Ref(child_value_node_text.to_owned());
+            }
+            let parent_context_node = qm
+                .nodes_for_capture_index(child_context_index)
+                .last()
+                .unwrap();
+            results.insert(
+                key_text.to_string(),
+                parent_context_node.utf8_text(content).unwrap().to_string(),
+            );
+        }
+    }
+
+    ChildrenOrRef::Children(results)
+}
+
+#[derive(Debug)]
+enum ChildrenOrRef {
+    Children(HashMap<String, String>),
+    Ref(String),
 }
 
 #[cfg(test)]
@@ -120,8 +127,6 @@ mod tests {
     use std::collections::HashMap;
     use std::error::Error;
     use std::path::PathBuf;
-
-    use mocktopus::mocking::*;
 
     use crate::bindings::OperationParser;
     use crate::content::ContentProviderMap;
@@ -139,55 +144,89 @@ paths:
     get:
       summary: List all pets
       operationId: listPets
-      tags:
-        - pets
-      parameters:
-        - name: limit
-          in: query
-          description: How many items to return at one time (max 100)
-          required: false
-          schema:
-            type: integer
-            format: int32
-      responses:
-        '200':
-          description: A paged array of pets
-          headers:
-            x-next:
-              description: A link to the next page of responses
-              schema:
-                type: string
-          content:
-            application/json:    
-              schema:
-                $ref: '#/components/schemas/Pets'
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
     post:
       summary: Create a pet
       operationId: createPets
-      tags:
-        - pets
-      responses:
-        '201':
-          description: Null response
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
             "#;
         let contents = HashMap::from([(root_path, root_content.to_owned())]);
         let provider = Box::new(ContentProviderMap::from_map(contents));
         let parser = TreeSitterOperationParser2::new(provider);
         let nodes = parser.get_operation_nodes();
-        println!("{:?}", nodes);
+        let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
+        assert!(operation_ids.contains(&String::from("listPets")));
+        assert!(operation_ids.contains(&String::from("createPets")));
 
         Ok(())
+    }
+
+    #[test]
+    fn get_children_by_key_no_ref() -> Result<(), Box<dyn Error>> {
+        let results = super::get_children_by_key(
+            "test",
+            r#"
+test:
+  test1:
+    description: yes
+  test2:
+    description: no"#
+                .as_bytes(),
+        );
+        return match results {
+            super::ChildrenOrRef::Children(children) => {
+                assert!(children.get("test1").unwrap() == "test1:\n    description: yes");
+                assert!(children.get("test2").unwrap() == "test2:\n    description: no");
+                Ok(())
+            }
+            super::ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
+        };
+    }
+
+    #[test]
+    fn get_children_by_key_ref() -> Result<(), Box<dyn Error>> {
+        let results = super::get_children_by_key(
+            "test",
+            r#"
+test:
+  test1:
+    description: yes
+  test2:
+    description: no
+  $ref: '#/fake/ref'"#
+                .as_bytes(),
+        );
+        return match results {
+            super::ChildrenOrRef::Children(_) => {
+                panic!("Test should have returned Ref enum")
+            }
+            super::ChildrenOrRef::Ref(r) => {
+                assert!(r == "'#/fake/ref'");
+                Ok(())
+            }
+        };
+    }
+
+    #[test]
+    fn get_children_by_key_child_contains_ref() -> Result<(), Box<dyn Error>> {
+        let results = super::get_children_by_key(
+            "test",
+            r#"
+test:
+  test1:
+    description: yes
+  test2:
+    description: no
+  test3:
+    $ref: '#/fake/ref'"#
+                .as_bytes(),
+        );
+        return match results {
+            super::ChildrenOrRef::Children(children) => {
+                assert!(children.get("test1").unwrap() == "test1:\n    description: yes");
+                assert!(children.get("test2").unwrap() == "test2:\n    description: no");
+                assert!(children.get("test3").unwrap() == "test3:\n    $ref: '#/fake/ref'");
+                Ok(())
+            }
+            super::ChildrenOrRef::Ref(_) => panic!("Test should have returned Children enum"),
+        };
     }
 }
