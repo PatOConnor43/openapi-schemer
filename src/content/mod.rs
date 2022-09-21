@@ -13,21 +13,27 @@ pub trait ContentProvider {
 
 pub struct ContentProviderMap {
     contents: HashMap<PathBuf, String>,
+    root_file: PathBuf,
 }
 
 impl ContentProviderMap {
     pub fn new() -> Self {
         ContentProviderMap {
             contents: HashMap::new(),
+            root_file: PathBuf::from("#"),
         }
     }
 
     pub fn from_map(contents: HashMap<PathBuf, String>) -> Self {
-        ContentProviderMap { contents }
+        ContentProviderMap {
+            contents,
+            root_file: PathBuf::from("#"),
+        }
     }
 
     pub fn from_open_api_yaml(path: PathBuf) -> Self {
         let mut backing_map: HashMap<PathBuf, String> = HashMap::new();
+        let working_directory = path.parent().unwrap();
         let content = get_content_for_path(path.to_owned());
         let refs = bindings::find_refs(&content);
         let external_refs: Vec<String> = refs
@@ -37,13 +43,18 @@ impl ContentProviderMap {
         backing_map.insert(path.to_owned(), content.to_owned());
         backing_map.insert(PathBuf::from("#"), content.to_owned());
         for reference in external_refs {
-            let path = PathBuf::from(reference);
+            let mut path = PathBuf::new();
+            path.push(working_directory);
+            path.push(reference);
+            let path = ::std::fs::canonicalize(path);
+            let path = path.unwrap();
             let content = get_content_for_path(path.to_owned());
             backing_map.insert(path, content);
         }
 
         ContentProviderMap {
             contents: backing_map,
+            root_file: path,
         }
     }
 }
@@ -51,7 +62,7 @@ impl ContentProviderMap {
 #[cfg_attr(test, mockable)]
 fn get_content_for_path(path: PathBuf) -> String {
     let mut content = String::new();
-    let mut file = File::open(&path).expect("Unable to open the file");
+    let mut file = File::open(&path).unwrap();
     // TODO error handling
     file.read_to_string(&mut content)
         .expect("Unable to read the file");
@@ -60,19 +71,20 @@ fn get_content_for_path(path: PathBuf) -> String {
 
 impl ContentProvider for ContentProviderMap {
     fn get(&self, path: PathBuf) -> String {
-        return match self.contents.get(&path) {
-            Some(path) => path.to_string(),
-            None => "".to_string(),
-        };
+        if path == PathBuf::from("#") {
+            return self.contents.get(&self.root_file).unwrap().to_owned();
+        }
+
+        let root_directory = self.root_file.parent().unwrap();
+        let mut full_path = PathBuf::new();
+        full_path.push(root_directory);
+        full_path.push(path);
+        let full_path = ::std::fs::canonicalize(full_path).unwrap();
+        return self.contents.get(&full_path).unwrap().to_owned();
     }
 
     fn paths(&self) -> Vec<&PathBuf> {
         self.contents.keys().collect()
-    }
-}
-impl Into<ContentProviderMap> for HashMap<PathBuf, String> {
-    fn into(self) -> ContentProviderMap {
-        ContentProviderMap { contents: self }
     }
 }
 

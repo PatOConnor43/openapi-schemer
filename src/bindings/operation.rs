@@ -21,54 +21,59 @@ impl OperationParser for TreeSitterOperationParser2 {
         let content = self.provider.get(PathBuf::from("#"));
         let mut results: Vec<super::OperationNode> = vec![];
 
-        let paths_children = get_children_by_key("paths", content.as_bytes());
+        let mut paths_children = get_children_by_key("paths", content.as_bytes());
+        if let ChildrenOrRef::Ref(r) = paths_children {
+            let content = self.provider.get(PathBuf::from(r));
+            paths_children = get_top_level_keys(content.as_bytes());
+        }
         match paths_children {
+            ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
             ChildrenOrRef::Children(children) => {
                 for (path, context) in children {
-                    let methods = get_children_by_key(path.as_ref(), context.as_bytes());
+                    let mut methods = get_children_by_key(path.as_ref(), context.as_bytes());
+                    if let ChildrenOrRef::Ref(r) = methods {
+                        let content = self.provider.get(PathBuf::from(r));
+                        methods = get_top_level_keys(content.as_bytes());
+                    }
                     match methods {
+                        ChildrenOrRef::Ref(_) => {
+                            panic!("Found $ref when following $ref. Aborting.")
+                        }
                         ChildrenOrRef::Children(children) => {
                             for (operation, context) in children {
-                                let operation = get_operation_id_by_parent(
-                                    operation.as_ref(),
-                                    context.as_bytes(),
-                                )
-                                .unwrap();
-                                results.push(super::OperationNode { text: operation })
-                            }
-                        }
-                        ChildrenOrRef::Ref(_) => todo!(),
-                    }
-                }
-            }
-            ChildrenOrRef::Ref(r) => {
-                let content = self.provider.get(PathBuf::from(r));
-
-                let paths_children = get_top_level_keys(content.as_bytes());
-                match paths_children {
-                    ChildrenOrRef::Children(children) => {
-                        for (path, context) in children {
-                            let methods = get_children_by_key(path.as_ref(), context.as_bytes());
-                            match methods {
-                                ChildrenOrRef::Children(children) => {
-                                    for (operation, context) in children {
-                                        let operation = get_operation_id_by_parent(
-                                            operation.as_ref(),
-                                            context.as_bytes(),
-                                        )
-                                        .unwrap();
+                                let mut operation_child_keys =
+                                    get_children_by_key(operation.as_ref(), context.as_bytes());
+                                if let ChildrenOrRef::Ref(r) = operation_child_keys {
+                                    let content = self.provider.get(PathBuf::from(r));
+                                    operation_child_keys = get_top_level_keys(content.as_bytes());
+                                }
+                                match operation_child_keys {
+                                    ChildrenOrRef::Ref(_) => {
+                                        panic!("Found $ref when following $ref. Aborting.")
+                                    }
+                                    ChildrenOrRef::Children(children) => {
+                                        // This base case looks pretty gross and maybe it is, but the
+                                        // resulting value of children["operationId"] is the string
+                                        // "operationId: <whatever>". So I just do some string
+                                        // splitting since it should definitely look like that right?
+                                        let operation =
+                                            children.get("operationId").unwrap().to_string();
+                                        let operation = operation
+                                            .split("operationId:")
+                                            .into_iter()
+                                            .last()
+                                            .unwrap()
+                                            .trim()
+                                            .to_owned();
                                         results.push(super::OperationNode { text: operation })
                                     }
                                 }
-                                ChildrenOrRef::Ref(_) => todo!(),
                             }
                         }
                     }
-                    ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
                 }
             }
         }
-
         results
     }
 }
@@ -154,7 +159,10 @@ fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
                     .last()
                     .unwrap()
                     .utf8_text(content)
-                    .unwrap();
+                    .unwrap()
+                    // Prevent weird file names by removing quotes
+                    .replace("'", "")
+                    .replace("\"", "");
                 return ChildrenOrRef::Ref(child_value_node_text.to_owned());
             }
             let parent_context_node = qm
@@ -235,6 +243,52 @@ paths:
         let contents = HashMap::from([
             (root_path, root_content.to_owned()),
             (paths_path, paths_content.to_owned()),
+        ]);
+        let provider = Box::new(ContentProviderMap::from_map(contents));
+        let parser = TreeSitterOperationParser2::new(provider);
+        let nodes = parser.get_operation_nodes();
+        let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
+        assert!(operation_ids.contains(&String::from("listPets")));
+        assert!(operation_ids.contains(&String::from("createPets")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_operation_nodes_with_ref_operations() -> Result<(), Box<dyn Error>> {
+        let root_path = PathBuf::from("#");
+        let paths_path = PathBuf::from("Paths.yaml");
+        let pets_get_path = PathBuf::from("paths/pets/get.yaml");
+        let pets_post_path = PathBuf::from("paths/pets/post.yaml");
+
+        let root_content = r#"
+paths:
+  $ref: Paths.yaml
+            "#;
+
+        let paths_content = r#"
+# Paths.yaml
+/pets:
+    get:
+      $ref: paths/pets/get.yaml
+    post:
+      $ref: paths/pets/post.yaml
+            "#;
+        let pets_get_content = r#"
+# get.yaml
+summary: List all pets
+operationId: listPets
+            "#;
+        let pets_post_content = r#"
+# post.yaml
+summary: Create a pet
+operationId: createPets
+            "#;
+        let contents = HashMap::from([
+            (root_path, root_content.to_owned()),
+            (paths_path, paths_content.to_owned()),
+            (pets_get_path, pets_get_content.to_owned()),
+            (pets_post_path, pets_post_content.to_owned()),
         ]);
         let provider = Box::new(ContentProviderMap::from_map(contents));
         let parser = TreeSitterOperationParser2::new(provider);

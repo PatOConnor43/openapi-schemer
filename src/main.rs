@@ -78,7 +78,8 @@ fn main() {
         Some(_) => match args.command {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
-                    let provider = ContentProviderMap::from_open_api_yaml(args.input.unwrap());
+                    let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
+                    let provider = ContentProviderMap::from_open_api_yaml(path);
                     let parser = TreeSitterOperationParser2::new(Box::new(provider));
                     match operation::list(parser) {
                         Ok(result) => println!("{}", result),
