@@ -15,6 +15,7 @@
 //! [Parser]: https://docs.rs/tree-sitter/*/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 
+pub mod operation;
 pub mod path;
 pub mod schema;
 
