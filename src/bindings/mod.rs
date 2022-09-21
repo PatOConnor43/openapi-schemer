@@ -50,7 +50,7 @@ pub fn find_refs(content: &str) -> Vec<String> {
 
     for qm in qc.matches(&query, tree.root_node(), provider) {
         for cap in qm.captures {
-            if query.capture_names()[cap.index as usize] == "value" {
+            if query.capture_names()[cap.index as usize] == "query-value" {
                 if let Ok(text) = cap.node.utf8_text(provider) {
                     results.push(text.replace("'", "").replace("\"", ""));
                 }
@@ -68,8 +68,41 @@ fn create_ref_query() -> String {
 
     return format!(
         r#"
-            (block_mapping_pair key: ((flow_node) @key (#eq? @key "$ref")) value: (flow_node) @value)
+            (block_mapping_pair key: ((flow_node) @query-key (#eq? @query-key "$ref")) value: (flow_node) @query-value)
             "#
+    );
+}
+
+fn create_key_query(key: &str) -> String {
+    // Allow values to be block or flow. Callers can disambiguate by the type if they care.
+    return format!(
+        r#"
+            (block_mapping_pair key: ((flow_node) @query-key (#eq? @query-key "{}")) value: [(flow_node)(block_node)] @query-value)
+            "#,
+        key
+    );
+}
+
+fn create_children_keys_query(parent_key: &str) -> String {
+    return format!(
+        r#"
+        (
+            (block_mapping_pair
+             key: (flow_node) @key-name
+             value: (
+                 block_node (
+                     block_mapping (
+                         block_mapping_pair
+                         key: (flow_node) @child-key
+                         value: [(flow_node)(block_node)] @child-value
+                     )
+                 )
+             ) @key-content
+            )
+            (#eq? @key-name "{}")
+        )
+        "#,
+        parent_key
     );
 }
 
@@ -194,7 +227,7 @@ mod tests {
 
     use crate::bindings::{OperationParser, TreeSitterOperationParser};
 
-    use super::find_refs;
+    use super::{create_key_query, find_refs};
 
     #[test]
     fn test_can_load_grammar() {

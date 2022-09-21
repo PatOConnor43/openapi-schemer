@@ -5,16 +5,27 @@ use crate::bindings;
 #[cfg(test)]
 use mocktopus::macros::mockable;
 
+#[cfg_attr(test, mockable)]
 pub trait ContentProvider {
     fn get(&self, path: PathBuf) -> String;
     fn paths(&self) -> Vec<&PathBuf>;
 }
 
-struct ContentProviderMap {
+pub struct ContentProviderMap {
     contents: HashMap<PathBuf, String>,
 }
 
 impl ContentProviderMap {
+    pub fn new() -> Self {
+        ContentProviderMap {
+            contents: HashMap::new(),
+        }
+    }
+
+    pub fn from_map(contents: HashMap<PathBuf, String>) -> Self {
+        ContentProviderMap { contents }
+    }
+
     pub fn from_open_api_yaml(path: PathBuf) -> Self {
         let mut backing_map: HashMap<PathBuf, String> = HashMap::new();
         let content = get_content_for_path(path.to_owned());
@@ -23,7 +34,8 @@ impl ContentProviderMap {
             .into_iter()
             .filter(|dollar_ref| !dollar_ref.starts_with("#"))
             .collect();
-        backing_map.insert(path.to_owned(), content);
+        backing_map.insert(path.to_owned(), content.to_owned());
+        backing_map.insert(PathBuf::from("#"), content.to_owned());
         for reference in external_refs {
             let path = PathBuf::from(reference);
             let content = get_content_for_path(path.to_owned());
@@ -112,10 +124,14 @@ components:
         super::get_content_for_path.mock_safe(|_| MockResult::Return(content.to_string()));
         bindings::find_refs.mock_safe(|_| MockResult::Return(vec![]));
 
-        let path = PathBuf::new();
-        let provider = ContentProviderMap::from_open_api_yaml(path.to_owned());
-        assert_eq!(provider.paths(), vec![&path]);
-        assert_eq!(provider.get(path), content);
+        let fully_qualified_path = PathBuf::new();
+        let short_root_path = PathBuf::from("#");
+        let provider = ContentProviderMap::from_open_api_yaml(fully_qualified_path.to_owned());
+        assert_eq!(provider.paths().len(), 2);
+        assert!(provider.paths().contains(&&fully_qualified_path));
+        assert!(provider.paths().contains(&&short_root_path));
+        assert_eq!(provider.get(fully_qualified_path), content);
+        assert_eq!(provider.get(short_root_path), content);
     }
 
     #[test]
@@ -152,6 +168,7 @@ paths:
           "#
         .to_owned();
         let root_path = PathBuf::new();
+        let short_root_path = PathBuf::from("#");
         let pets_path = PathBuf::from("resources/pets.yaml");
         let pet_path = PathBuf::from("resources/pet.yaml");
         let content_map = HashMap::from([
@@ -172,8 +189,9 @@ paths:
         });
 
         let provider = ContentProviderMap::from_open_api_yaml(root_path.to_owned());
-        assert_eq!(provider.paths().len(), 3);
+        assert_eq!(provider.paths().len(), 4);
         assert!(provider.paths().contains(&&root_path));
+        assert!(provider.paths().contains(&&short_root_path));
         assert!(provider.paths().contains(&&pets_path));
         assert!(provider.paths().contains(&&pet_path));
         assert_eq!(provider.get(root_path), root_content);
