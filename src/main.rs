@@ -1,8 +1,10 @@
 use std::{fs::File, io::Read, path::PathBuf};
 
 use bindings::{
-    operation::TreeSitterOperationParser2, path::TreeSitterPathParser,
-    schema::TreeSitterSchemaParser, TreeSitterOperationParser,
+    operation::TreeSitterOperationParser2,
+    path::{TreeSitterPathParser, TreeSitterPathParser2},
+    schema::TreeSitterSchemaParser,
+    TreeSitterOperationParser,
 };
 use clap::{Args, Parser, Subcommand};
 use content::ContentProviderMap;
@@ -89,8 +91,9 @@ fn main() {
             },
             Commands::Path(subcommand) => match subcommand.command {
                 PathCommands::List => {
-                    let contents = get_file_contents(args.input.unwrap());
-                    let parser = TreeSitterPathParser::new(&contents);
+                    let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
+                    let provider = ContentProviderMap::from_open_api_yaml(path);
+                    let parser = TreeSitterPathParser2::new(Box::new(provider));
                     match path::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
