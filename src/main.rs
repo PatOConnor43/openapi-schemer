@@ -1,10 +1,6 @@
-use std::{fs::File, io::Read, path::PathBuf};
-
 use bindings::{
-    operation::TreeSitterOperationParser2,
-    path::{TreeSitterPathParser, TreeSitterPathParser2},
-    schema::{TreeSitterSchemaParser, TreeSitterSchemaParser2},
-    TreeSitterOperationParser,
+    operation::TreeSitterOperationParser2, path::TreeSitterPathParser2,
+    schema::TreeSitterSchemaParser2,
 };
 use clap::{Args, Parser, Subcommand};
 use content::ContentProviderMap;
@@ -115,12 +111,4 @@ fn main() {
     }
 
     ()
-}
-
-fn get_file_contents(path: PathBuf) -> String {
-    let mut file = File::open(path).expect("Unable to open the file");
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .expect("Unable to read the file");
-    return contents;
 }
