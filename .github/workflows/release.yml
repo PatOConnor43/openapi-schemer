@@ -33,12 +33,14 @@ jobs:
       id: ${{ steps.update_release_draft.outputs.id }}
       name: ${{ steps.update_release_draft.outputs.name }}
       tag_name: ${{ steps.update_release_draft.outputs.tag_name }}
+      schemer_version: ${{ env.SCHEMER_VERSION }}
     permissions:
       contents: write  # for release-drafter/release-drafter to create a github release
       pull-requests: write  # for release-drafter/release-drafter to add label to PR
     runs-on: ubuntu-latest
     steps:
       - name: Get the release version from the tag
+        id: get_schemer_version
         shell: bash
         if: env.SCHEMER_VERSION == ''
         run: |
@@ -141,7 +143,7 @@ jobs:
     - name: Build archive
       shell: bash
       run: |
-        staging="openapi-schemer-${{ env.SCHEMER_VERSION }}-${{ matrix.target }}"
+        staging="openapi-schemer-${{ needs.update_release_draft.outputs.schemer_version }}-${{ matrix.target }}"
         mkdir -p "$staging"
 
         cp {README.md,LICENSE} "$staging/"
@@ -154,5 +156,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload --clobber ${{ env.SCHEMER_VERSION }} ${{ env.ASSET }}
+        gh release upload --clobber ${{ needs.update_release_draft.outputs.schemer_version }} ${{ env.ASSET }}
 
