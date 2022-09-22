@@ -13,17 +13,17 @@ pub trait PathParser {
     fn get_path_nodes(&self) -> Vec<PathNode>;
 }
 
-pub struct TreeSitterPathParser2 {
+pub struct TreeSitterPathParser {
     provider: Box<dyn ContentProvider>,
 }
 
-impl TreeSitterPathParser2 {
+impl TreeSitterPathParser {
     pub fn new(provider: Box<dyn ContentProvider>) -> Self {
         Self { provider }
     }
 }
 
-impl PathParser for TreeSitterPathParser2 {
+impl PathParser for TreeSitterPathParser {
     fn get_path_nodes(&self) -> Vec<PathNode> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<PathNode> = vec![];
@@ -51,7 +51,7 @@ mod tests {
     use mocktopus::mocking::*;
 
     use crate::{
-        bindings::path::{PathParser, TreeSitterPathParser2},
+        bindings::path::{PathParser, TreeSitterPathParser},
         content::ContentProvider,
         content::ContentProviderMap,
     };
@@ -76,7 +76,7 @@ paths:
         });
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
-        let parser = TreeSitterPathParser2::new(box_provider);
+        let parser = TreeSitterPathParser::new(box_provider);
         let nodes = parser.get_path_nodes();
         let paths: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert_eq!(paths.len(), 2);
@@ -114,7 +114,7 @@ paths:
         });
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
-        let parser = TreeSitterPathParser2::new(box_provider);
+        let parser = TreeSitterPathParser::new(box_provider);
         let nodes = parser.get_path_nodes();
         let paths: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert_eq!(paths.len(), 2);

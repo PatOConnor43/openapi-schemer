@@ -1,6 +1,6 @@
 use bindings::{
-    operation::TreeSitterOperationParser2, path::TreeSitterPathParser2,
-    schema::TreeSitterSchemaParser2,
+    operation::TreeSitterOperationParser, path::TreeSitterPathParser,
+    schema::TreeSitterSchemaParser,
 };
 use clap::{Args, Parser, Subcommand};
 use content::ContentProviderMap;
@@ -78,7 +78,7 @@ fn main() {
                 OperationCommands::List => {
                     let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
                     let provider = ContentProviderMap::from_open_api_yaml(path);
-                    let parser = TreeSitterOperationParser2::new(Box::new(provider));
+                    let parser = TreeSitterOperationParser::new(Box::new(provider));
                     match operation::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
@@ -89,7 +89,7 @@ fn main() {
                 PathCommands::List => {
                     let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
                     let provider = ContentProviderMap::from_open_api_yaml(path);
-                    let parser = TreeSitterPathParser2::new(Box::new(provider));
+                    let parser = TreeSitterPathParser::new(Box::new(provider));
                     match path::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
@@ -100,7 +100,7 @@ fn main() {
                 SchemaCommands::List => {
                     let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
                     let provider = ContentProviderMap::from_open_api_yaml(path);
-                    let parser = TreeSitterSchemaParser2::new(Box::new(provider));
+                    let parser = TreeSitterSchemaParser::new(Box::new(provider));
                     match schema::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),

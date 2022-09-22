@@ -13,17 +13,17 @@ pub trait SchemaParser {
     fn get_schema_nodes(&self) -> Vec<SchemaNode>;
 }
 
-pub struct TreeSitterSchemaParser2 {
+pub struct TreeSitterSchemaParser {
     provider: Box<dyn ContentProvider>,
 }
 
-impl TreeSitterSchemaParser2 {
+impl TreeSitterSchemaParser {
     pub fn new(provider: Box<dyn ContentProvider>) -> Self {
         Self { provider }
     }
 }
 
-impl SchemaParser for TreeSitterSchemaParser2 {
+impl SchemaParser for TreeSitterSchemaParser {
     fn get_schema_nodes(&self) -> Vec<SchemaNode> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<SchemaNode> = vec![];
@@ -39,9 +39,8 @@ impl SchemaParser for TreeSitterSchemaParser2 {
                 let schemas_context = children
                     .get("schemas")
                     .expect("Did not find schemas within components");
-                let mut schemas_children =
-                    get_children_by_key("schemas", schemas_context.as_bytes());
-                if let ChildrenOrRef::Ref(r) = schemas_children {
+                let schemas_children = get_children_by_key("schemas", schemas_context.as_bytes());
+                if let ChildrenOrRef::Ref(_) = schemas_children {
                     panic!("Expected structs under schemas key but found $ref instead.");
                 }
                 match schemas_children {
@@ -66,7 +65,7 @@ mod tests {
     use mocktopus::mocking::*;
 
     use crate::{
-        bindings::schema::{SchemaParser, TreeSitterSchemaParser2},
+        bindings::schema::{SchemaParser, TreeSitterSchemaParser},
         content::ContentProvider,
         content::ContentProviderMap,
     };
@@ -108,7 +107,7 @@ components:
 
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
-        let parser = TreeSitterSchemaParser2::new(box_provider);
+        let parser = TreeSitterSchemaParser::new(box_provider);
         let result = parser.get_schema_nodes();
         let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
         assert!(
@@ -175,7 +174,7 @@ schemas:
 
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
-        let parser = TreeSitterSchemaParser2::new(box_provider);
+        let parser = TreeSitterSchemaParser::new(box_provider);
         let result = parser.get_schema_nodes();
         let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
         assert!(

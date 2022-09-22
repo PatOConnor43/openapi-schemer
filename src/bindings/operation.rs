@@ -4,17 +4,17 @@ use crate::content::ContentProvider;
 
 use super::{get_children_by_key, get_top_level_keys, ChildrenOrRef, OperationParser};
 
-pub struct TreeSitterOperationParser2 {
+pub struct TreeSitterOperationParser {
     provider: Box<dyn ContentProvider>,
 }
 
-impl TreeSitterOperationParser2 {
+impl TreeSitterOperationParser {
     pub fn new(provider: Box<dyn ContentProvider>) -> Self {
         Self { provider }
     }
 }
 
-impl OperationParser for TreeSitterOperationParser2 {
+impl OperationParser for TreeSitterOperationParser {
     fn get_operation_nodes(&self) -> Vec<super::OperationNode> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<super::OperationNode> = vec![];
@@ -89,7 +89,7 @@ mod tests {
     use crate::content::ContentProvider;
     use crate::content::ContentProviderMap;
 
-    use super::TreeSitterOperationParser2;
+    use super::TreeSitterOperationParser;
 
     #[test]
     fn get_operation_nodes() -> Result<(), Box<dyn Error>> {
@@ -106,7 +106,7 @@ paths:
             "#;
         let contents = HashMap::from([(root_path, root_content.to_owned())]);
         let provider = Box::new(ContentProviderMap::from_map(contents));
-        let parser = TreeSitterOperationParser2::new(provider);
+        let parser = TreeSitterOperationParser::new(provider);
         let nodes = parser.get_operation_nodes();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
@@ -144,7 +144,7 @@ paths:
         });
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
-        let parser = TreeSitterOperationParser2::new(box_provider);
+        let parser = TreeSitterOperationParser::new(box_provider);
         let nodes = parser.get_operation_nodes();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
@@ -196,7 +196,7 @@ operationId: createPets
 
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
-        let parser = TreeSitterOperationParser2::new(box_provider);
+        let parser = TreeSitterOperationParser::new(box_provider);
         let nodes = parser.get_operation_nodes();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
