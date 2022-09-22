@@ -152,5 +152,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload --clobber ${{ needs.update_release_draft.outputs.tag_name }} ${{ env.ASSET }}
+        gh release upload --clobber ${{ needs.update_release_draft.outputs.schemer_version }} ${{ env.ASSET }}
 
