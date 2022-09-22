@@ -9,5 +9,8 @@ edition = "2021"
 clap = {version = "~3", features = ["derive"]}
 tree-sitter = {version = "~0.20"}
 
+[dev-dependencies]
+mocktopus = "0.7.0"
+
 [build-dependencies]
 cc="*"

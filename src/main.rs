@@ -1,11 +1,12 @@
-use std::{fs::File, io::Read, path::PathBuf};
-
 use bindings::{
-    path::TreeSitterPathParser, schema::TreeSitterSchemaParser, TreeSitterOperationParser,
+    operation::TreeSitterOperationParser, path::TreeSitterPathParser,
+    schema::TreeSitterSchemaParser,
 };
 use clap::{Args, Parser, Subcommand};
+use content::ContentProviderMap;
 
 mod bindings;
+mod content;
 mod error;
 mod operation;
 mod path;
@@ -75,8 +76,9 @@ fn main() {
         Some(_) => match args.command {
             Commands::Operation(subcommand) => match subcommand.command {
                 OperationCommands::List => {
-                    let contents = get_file_contents(args.input.unwrap());
-                    let parser = TreeSitterOperationParser::new(&contents);
+                    let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
+                    let provider = ContentProviderMap::from_open_api_yaml(path);
+                    let parser = TreeSitterOperationParser::new(Box::new(provider));
                     match operation::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
@@ -85,8 +87,9 @@ fn main() {
             },
             Commands::Path(subcommand) => match subcommand.command {
                 PathCommands::List => {
-                    let contents = get_file_contents(args.input.unwrap());
-                    let parser = TreeSitterPathParser::new(&contents);
+                    let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
+                    let provider = ContentProviderMap::from_open_api_yaml(path);
+                    let parser = TreeSitterPathParser::new(Box::new(provider));
                     match path::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
@@ -95,8 +98,9 @@ fn main() {
             },
             Commands::Schema(subcommand) => match subcommand.command {
                 SchemaCommands::List => {
-                    let contents = get_file_contents(args.input.unwrap());
-                    let parser = TreeSitterSchemaParser::new(&contents);
+                    let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
+                    let provider = ContentProviderMap::from_open_api_yaml(path);
+                    let parser = TreeSitterSchemaParser::new(Box::new(provider));
                     match schema::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
@@ -107,12 +111,4 @@ fn main() {
     }
 
     ()
-}
-
-fn get_file_contents(path: PathBuf) -> String {
-    let mut file = File::open(path).expect("Unable to open the file");
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .expect("Unable to read the file");
-    return contents;
 }
