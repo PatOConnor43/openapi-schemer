@@ -33,7 +33,6 @@ jobs:
       id: ${{ steps.update_release_draft.outputs.id }}
       name: ${{ steps.update_release_draft.outputs.name }}
       tag_name: ${{ steps.update_release_draft.outputs.tag_name }}
-      schemer_version: ${{ env.SOURCE_TAG }}
     permissions:
       contents: write  # for release-drafter/release-drafter to create a github release
       pull-requests: write  # for release-drafter/release-drafter to add label to PR
@@ -46,8 +45,11 @@ jobs:
           # Apparently, this is the right way to get a tag name. Really?
           #
           # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
-          echo ::set-output name=SOURCE_TAG::${GITHUB_REF#refs/tags/}
-          echo "version is: ${{ env.SOURCE_TAG }}"
+          echo "SCHEMER_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: Print SCHEMER_VERSION
+        id: print_version
+        run: |
+          echo "${{ env.SCHEMER_VERSION }}" # This will output 'yellow'
       # Drafts your next Release notes as Pull Requests are merged into "master"
       - uses: release-drafter/release-drafter@v5
         id: update_release_draft
@@ -139,7 +141,7 @@ jobs:
     - name: Build archive
       shell: bash
       run: |
-        staging="openapi-schemer-${{ needs.update_release_draft.outputs.schemer_version }}-${{ matrix.target }}"
+        staging="openapi-schemer-${{ env.SCHEMER_VERSION }}-${{ matrix.target }}"
         mkdir -p "$staging"
 
         cp {README.md,LICENSE} "$staging/"
@@ -152,5 +154,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload --clobber ${{ needs.update_release_draft.outputs.schemer_version }} ${{ env.ASSET }}
+        gh release upload --clobber ${{ env.SCHEMER_VERSION }} ${{ env.ASSET }}
 
