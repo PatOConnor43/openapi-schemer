@@ -3,7 +3,7 @@ use std::{fs::File, io::Read, path::PathBuf};
 use bindings::{
     operation::TreeSitterOperationParser2,
     path::{TreeSitterPathParser, TreeSitterPathParser2},
-    schema::TreeSitterSchemaParser,
+    schema::{TreeSitterSchemaParser, TreeSitterSchemaParser2},
     TreeSitterOperationParser,
 };
 use clap::{Args, Parser, Subcommand};
@@ -102,8 +102,9 @@ fn main() {
             },
             Commands::Schema(subcommand) => match subcommand.command {
                 SchemaCommands::List => {
-                    let contents = get_file_contents(args.input.unwrap());
-                    let parser = TreeSitterSchemaParser::new(&contents);
+                    let path = ::std::fs::canonicalize(args.input.unwrap()).unwrap();
+                    let provider = ContentProviderMap::from_open_api_yaml(path);
+                    let parser = TreeSitterSchemaParser2::new(Box::new(provider));
                     match schema::list(parser) {
                         Ok(result) => println!("{}", result),
                         Err(err) => eprintln!("Failed: {}", err),
