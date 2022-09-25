@@ -32,7 +32,7 @@ impl PathParser for TreeSitterPathParser {
         let mut paths_children = get_children_by_key("paths", content.as_bytes()).unwrap();
         if let ChildrenOrRef::Ref(r) = paths_children {
             let content = self.provider.get_content(PathBuf::from(r));
-            paths_children = get_top_level_keys(content.as_bytes());
+            paths_children = get_top_level_keys(content.as_bytes()).unwrap();
         }
         match paths_children {
             super::ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),

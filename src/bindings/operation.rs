@@ -22,7 +22,7 @@ impl OperationParser for TreeSitterOperationParser {
         let mut paths_children = get_children_by_key("paths", content.as_bytes()).unwrap();
         if let ChildrenOrRef::Ref(r) = paths_children {
             let content = self.provider.get_content(PathBuf::from(r));
-            paths_children = get_top_level_keys(content.as_bytes());
+            paths_children = get_top_level_keys(content.as_bytes()).unwrap();
         }
         match paths_children {
             super::ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
@@ -32,7 +32,7 @@ impl OperationParser for TreeSitterOperationParser {
                         get_children_by_key(path.as_ref(), context.as_bytes()).unwrap();
                     if let ChildrenOrRef::Ref(r) = methods {
                         let content = self.provider.get_content(PathBuf::from(r));
-                        methods = get_top_level_keys(content.as_bytes());
+                        methods = get_top_level_keys(content.as_bytes()).unwrap();
                     }
                     match methods {
                         super::ChildrenOrRef::Ref(_) => {
@@ -45,7 +45,8 @@ impl OperationParser for TreeSitterOperationParser {
                                         .unwrap();
                                 if let ChildrenOrRef::Ref(r) = operation_child_keys {
                                     let content = self.provider.get_content(PathBuf::from(r));
-                                    operation_child_keys = get_top_level_keys(content.as_bytes());
+                                    operation_child_keys =
+                                        get_top_level_keys(content.as_bytes()).unwrap();
                                 }
                                 match operation_child_keys {
                                     super::ChildrenOrRef::Ref(_) => {

@@ -116,13 +116,14 @@ fn create_yaml_context_query(parent_key: &str) -> String {
     );
 }
 
-fn get_top_level_keys(content: &[u8]) -> ChildrenOrRef {
+fn get_top_level_keys(content: &[u8]) -> Result<ChildrenOrRef> {
     let language = language();
     let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
+    parser.set_language(language)?;
     let tree = parser.parse(content.to_owned(), None).unwrap();
     let query = create_top_level_yaml_context_query();
-    let query = Query::new(language, &query).expect("Could not construct query");
+    let query = Query::new(language, &query)
+        .with_context(|| format!("Could not construct query `{}`", query))?;
     let mut qc = QueryCursor::new();
 
     let mut results: HashMap<String, String> = HashMap::new();
@@ -138,12 +139,17 @@ fn get_top_level_keys(content: &[u8]) -> ChildrenOrRef {
                 .unwrap();
             results.insert(
                 key_text.to_string(),
-                parent_context_node.utf8_text(content).unwrap().to_string(),
+                parent_context_node
+                    .utf8_text(content)
+                    .with_context(|| {
+                        format!("Could not extract value text for key `{}`", key_text)
+                    })?
+                    .to_string(),
             );
         }
     }
 
-    ChildrenOrRef::Children(results)
+    Ok(ChildrenOrRef::Children(results))
 }
 
 fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
@@ -152,7 +158,8 @@ fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
     parser.set_language(language)?;
     let tree = parser.parse(content.to_owned(), None).unwrap();
     let query = create_yaml_context_query(key);
-    let query = Query::new(language, &query).expect("Could not construct query");
+    let query = Query::new(language, &query)
+        .with_context(|| format!("Could not construct query `{}`", query))?;
     let mut qc = QueryCursor::new();
 
     let mut results: HashMap<String, String> = HashMap::new();

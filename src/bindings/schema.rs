@@ -32,7 +32,7 @@ impl SchemaParser for TreeSitterSchemaParser {
             get_children_by_key("components", content.as_bytes()).unwrap();
         if let ChildrenOrRef::Ref(r) = components_children {
             let content = self.provider.get_content(PathBuf::from(r));
-            components_children = get_top_level_keys(content.as_bytes());
+            components_children = get_top_level_keys(content.as_bytes()).unwrap();
         }
         match components_children {
             ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
