@@ -28,7 +28,8 @@ impl SchemaParser for TreeSitterSchemaParser {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<SchemaNode> = vec![];
 
-        let mut components_children = get_children_by_key("components", content.as_bytes());
+        let mut components_children =
+            get_children_by_key("components", content.as_bytes()).unwrap();
         if let ChildrenOrRef::Ref(r) = components_children {
             let content = self.provider.get_content(PathBuf::from(r));
             components_children = get_top_level_keys(content.as_bytes());
@@ -39,7 +40,8 @@ impl SchemaParser for TreeSitterSchemaParser {
                 let schemas_context = children
                     .get("schemas")
                     .expect("Did not find schemas within components");
-                let schemas_children = get_children_by_key("schemas", schemas_context.as_bytes());
+                let schemas_children =
+                    get_children_by_key("schemas", schemas_context.as_bytes()).unwrap();
                 if let ChildrenOrRef::Ref(_) = schemas_children {
                     panic!("Expected structs under schemas key but found $ref instead.");
                 }

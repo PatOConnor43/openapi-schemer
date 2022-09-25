@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::path::PathBuf;
 
 use crate::content::ContentProvider;
@@ -10,7 +11,7 @@ pub struct PathNode {
 }
 
 pub trait PathParser {
-    fn get_path_nodes(&self) -> Vec<PathNode>;
+    fn get_path_nodes(&self) -> Result<Vec<PathNode>>;
 }
 
 pub struct TreeSitterPathParser {
@@ -24,11 +25,11 @@ impl TreeSitterPathParser {
 }
 
 impl PathParser for TreeSitterPathParser {
-    fn get_path_nodes(&self) -> Vec<PathNode> {
+    fn get_path_nodes(&self) -> Result<Vec<PathNode>> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<PathNode> = vec![];
 
-        let mut paths_children = get_children_by_key("paths", content.as_bytes());
+        let mut paths_children = get_children_by_key("paths", content.as_bytes()).unwrap();
         if let ChildrenOrRef::Ref(r) = paths_children {
             let content = self.provider.get_content(PathBuf::from(r));
             paths_children = get_top_level_keys(content.as_bytes());
@@ -41,7 +42,7 @@ impl PathParser for TreeSitterPathParser {
                 }
             }
         }
-        results
+        Ok(results)
     }
 }
 #[cfg(test)]
@@ -77,7 +78,7 @@ paths:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterPathParser::new(box_provider);
-        let nodes = parser.get_path_nodes();
+        let nodes = parser.get_path_nodes().unwrap();
         let paths: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&String::from("/pets")));
@@ -115,7 +116,7 @@ paths:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterPathParser::new(box_provider);
-        let nodes = parser.get_path_nodes();
+        let nodes = parser.get_path_nodes().unwrap();
         let paths: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&String::from("/pets")));

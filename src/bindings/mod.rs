@@ -19,6 +19,7 @@ pub mod operation;
 pub mod path;
 pub mod schema;
 
+use anyhow::Result;
 use std::collections::HashMap;
 
 use tree_sitter::{Language, Parser, Query, QueryCursor};
@@ -145,10 +146,10 @@ fn get_top_level_keys(content: &[u8]) -> ChildrenOrRef {
     ChildrenOrRef::Children(results)
 }
 
-fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
+fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
     let language = language();
     let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
+    parser.set_language(language)?;
     let tree = parser.parse(content.to_owned(), None).unwrap();
     let query = create_yaml_context_query(key);
     let query = Query::new(language, &query).expect("Could not construct query");
@@ -172,7 +173,7 @@ fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
                     // Prevent weird file names by removing quotes
                     .replace("'", "")
                     .replace("\"", "");
-                return ChildrenOrRef::Ref(child_value_node_text.to_owned());
+                return Ok(ChildrenOrRef::Ref(child_value_node_text.to_owned()));
             }
             let parent_context_node = qm
                 .nodes_for_capture_index(child_context_index)
@@ -185,7 +186,7 @@ fn get_children_by_key(key: &str, content: &[u8]) -> ChildrenOrRef {
         }
     }
 
-    ChildrenOrRef::Children(results)
+    Ok(ChildrenOrRef::Children(results))
 }
 
 #[derive(Debug)]
