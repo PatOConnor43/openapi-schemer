@@ -19,7 +19,7 @@ pub mod operation;
 pub mod path;
 pub mod schema;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 
 use tree_sitter::{Language, Parser, Query, QueryCursor};
@@ -169,7 +169,7 @@ fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
                     .last()
                     .unwrap()
                     .utf8_text(content)
-                    .unwrap()
+                    .with_context(|| format!("Could not extract path for $ref node"))?
                     // Prevent weird file names by removing quotes
                     .replace("'", "")
                     .replace("\"", "");
@@ -181,7 +181,10 @@ fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
                 .unwrap();
             results.insert(
                 key_text.to_string(),
-                parent_context_node.utf8_text(content).unwrap().to_string(),
+                parent_context_node
+                    .utf8_text(content)
+                    .with_context(|| format!("Could not extract text for child key"))?
+                    .to_string(),
             );
         }
     }
