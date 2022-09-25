@@ -46,7 +46,7 @@ mod tests {
         }
     }
     impl PathParser for MockParser {
-        fn get_path_nodes(&self) -> Result<Vec<PathNode>> {
+        fn get_path_nodes(&self) -> Result<Vec<PathNode>, OpenapiSchemerError> {
             Ok(self.nodes.to_owned())
         }
     }

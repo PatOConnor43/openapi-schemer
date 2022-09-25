@@ -2,8 +2,8 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum OpenapiSchemerError {
-    OperationList(Box<dyn std::error::Error>),
-    PathList(Box<dyn std::error::Error>),
+    OperationList(String),
+    PathList(String),
 }
 
 impl std::error::Error for OpenapiSchemerError {}
