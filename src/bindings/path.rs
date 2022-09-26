@@ -1,6 +1,7 @@
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-use crate::content::ContentProvider;
+use crate::{content::ContentProvider, error::OpenapiSchemerError};
 
 use super::{get_children_by_key, get_top_level_keys, ChildrenOrRef};
 
@@ -10,7 +11,7 @@ pub struct PathNode {
 }
 
 pub trait PathParser {
-    fn get_path_nodes(&self) -> Vec<PathNode>;
+    fn get_path_nodes(&self) -> Result<Vec<PathNode>, OpenapiSchemerError>;
 }
 
 pub struct TreeSitterPathParser {
@@ -24,24 +25,32 @@ impl TreeSitterPathParser {
 }
 
 impl PathParser for TreeSitterPathParser {
-    fn get_path_nodes(&self) -> Vec<PathNode> {
+    fn get_path_nodes(&self) -> Result<Vec<PathNode>, OpenapiSchemerError> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<PathNode> = vec![];
 
-        let mut paths_children = get_children_by_key("paths", content.as_bytes());
+        let mut paths_children = get_children_by_key("paths", content.as_bytes())
+            .with_context(|| format!("Failed to get children for yaml key `paths`"))
+            .map_err(|error| OpenapiSchemerError::PathList(error.to_string()))?;
         if let ChildrenOrRef::Ref(r) = paths_children {
             let content = self.provider.get_content(PathBuf::from(r));
-            paths_children = get_top_level_keys(content.as_bytes());
+            paths_children = get_top_level_keys(content.as_bytes())
+                .with_context(|| format!("Failed to get children for yaml key `paths`"))
+                .map_err(|error| OpenapiSchemerError::PathList(error.to_string()))?;
         }
         match paths_children {
-            super::ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
+            super::ChildrenOrRef::Ref(_) => {
+                return Err(OpenapiSchemerError::PathList(format!(
+                    "$ref cannot link to another $ref"
+                )));
+            }
             super::ChildrenOrRef::Children(children) => {
                 for (path, _) in children {
                     results.push(PathNode { text: path })
                 }
             }
         }
-        results
+        Ok(results)
     }
 }
 #[cfg(test)]
@@ -77,7 +86,7 @@ paths:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterPathParser::new(box_provider);
-        let nodes = parser.get_path_nodes();
+        let nodes = parser.get_path_nodes().unwrap();
         let paths: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&String::from("/pets")));
@@ -115,7 +124,7 @@ paths:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterPathParser::new(box_provider);
-        let nodes = parser.get_path_nodes();
+        let nodes = parser.get_path_nodes().unwrap();
         let paths: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&String::from("/pets")));

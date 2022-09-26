@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::fmt::Display;
 
 use crate::{bindings::path::PathParser, error::OpenapiSchemerError};
@@ -20,7 +21,7 @@ impl Display for ListResult {
 }
 
 pub fn list<T: PathParser>(parser: T) -> Result<ListResult, OpenapiSchemerError> {
-    let nodes = parser.get_path_nodes();
+    let nodes = parser.get_path_nodes().unwrap();
     let node_texts = nodes
         .into_iter()
         .map(|node| node.text.to_string())
@@ -45,8 +46,8 @@ mod tests {
         }
     }
     impl PathParser for MockParser {
-        fn get_path_nodes(&self) -> Vec<PathNode> {
-            self.nodes.to_owned()
+        fn get_path_nodes(&self) -> Result<Vec<PathNode>, OpenapiSchemerError> {
+            Ok(self.nodes.to_owned())
         }
     }
 

@@ -2,8 +2,9 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum OpenapiSchemerError {
-    OperationList(Box<dyn std::error::Error>),
-    PathList(Box<dyn std::error::Error>),
+    OperationList(String),
+    PathList(String),
+    SchemaList(String),
 }
 
 impl std::error::Error for OpenapiSchemerError {}
@@ -13,6 +14,7 @@ impl fmt::Display for OpenapiSchemerError {
         match self {
             OpenapiSchemerError::OperationList(cause) => cause.fmt(f),
             OpenapiSchemerError::PathList(cause) => cause.fmt(f),
+            OpenapiSchemerError::SchemaList(cause) => cause.fmt(f),
         }
     }
 }
