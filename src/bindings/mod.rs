@@ -19,7 +19,7 @@ pub mod operation;
 pub mod path;
 pub mod schema;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use std::collections::HashMap;
 
 use tree_sitter::{Language, Parser, Query, QueryCursor};
@@ -122,7 +122,9 @@ fn get_top_level_keys(content: &[u8]) -> Result<ChildrenOrRef> {
     let language = language();
     let mut parser = Parser::new();
     parser.set_language(language)?;
-    let tree = parser.parse(content.to_owned(), None).unwrap();
+    let tree = parser
+        .parse(content.to_owned(), None)
+        .ok_or_else(|| Error::msg(format!("Could not parse tree")))?;
     let query = create_top_level_yaml_context_query();
     let query = Query::new(language, &query)
         .with_context(|| format!("Could not construct query `{}`", query))?;
@@ -131,17 +133,29 @@ fn get_top_level_keys(content: &[u8]) -> Result<ChildrenOrRef> {
     let mut results: HashMap<String, String> = HashMap::new();
 
     for qm in qc.matches(&query, tree.root_node(), content) {
-        let child_key_index = query.capture_index_for_name("child-key").unwrap();
-        let child_context_index = query.capture_index_for_name("child-context").unwrap();
-        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
+        let child_key_index = query
+            .capture_index_for_name("child-key")
+            .ok_or_else(|| Error::msg(format!("Could not find capture for `{}`", "child-key")))?;
+        let child_context_index =
+            query
+                .capture_index_for_name("child-context")
+                .ok_or_else(|| {
+                    Error::msg(format!("Could not find capture for `{}`", "child-context"))
+                })?;
+        let child_key_node = qm
+            .nodes_for_capture_index(child_key_index)
+            .last()
+            .ok_or_else(|| Error::msg(format!("Could not find node for `{}`", "child-key")))?;
         if let Ok(key_text) = child_key_node.utf8_text(content) {
-            let parent_context_node = qm
+            let child_context_node = qm
                 .nodes_for_capture_index(child_context_index)
                 .last()
-                .unwrap();
+                .ok_or_else(|| {
+                    Error::msg(format!("Could not find node for `{}`", "child-context"))
+                })?;
             results.insert(
                 key_text.to_string(),
-                parent_context_node
+                child_context_node
                     .utf8_text(content)
                     .with_context(|| {
                         format!("Could not extract value text for key `{}`", key_text)
@@ -158,7 +172,9 @@ fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
     let language = language();
     let mut parser = Parser::new();
     parser.set_language(language)?;
-    let tree = parser.parse(content.to_owned(), None).unwrap();
+    let tree = parser
+        .parse(content.to_owned(), None)
+        .ok_or_else(|| Error::msg(format!("Could not parse tree for parent key `{}`", key)))?;
     let query = create_yaml_context_query(key);
     let query = Query::new(language, &query)
         .with_context(|| format!("Could not construct query `{}`", query))?;
@@ -167,16 +183,32 @@ fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
     let mut results: HashMap<String, String> = HashMap::new();
 
     for qm in qc.matches(&query, tree.root_node(), content) {
-        let child_key_index = query.capture_index_for_name("child-key").unwrap();
-        let child_value_index = query.capture_index_for_name("child-value").unwrap();
-        let child_context_index = query.capture_index_for_name("child-context").unwrap();
-        let child_key_node = qm.nodes_for_capture_index(child_key_index).last().unwrap();
+        let child_key_index = query
+            .capture_index_for_name("child-key")
+            .ok_or_else(|| Error::msg(format!("Could not find capture for `{}`", "child-key")))?;
+        let child_value_index = query
+            .capture_index_for_name("child-value")
+            .ok_or_else(|| Error::msg(format!("Could not find capture for `{}`", "child-value")))?;
+        let child_context_index =
+            query
+                .capture_index_for_name("child-context")
+                .ok_or_else(|| {
+                    Error::msg(format!("Could not find capture for `{}`", "child-context"))
+                })?;
+        let child_key_node = qm
+            .nodes_for_capture_index(child_key_index)
+            .last()
+            .ok_or_else(|| {
+                Error::msg(format!("Could not find node for `{}`", "child-key-index"))
+            })?;
         if let Ok(key_text) = child_key_node.utf8_text(content) {
             if key_text == "$ref" {
                 let child_value_node_text = qm
                     .nodes_for_capture_index(child_value_index)
                     .last()
-                    .unwrap()
+                    .ok_or_else(|| {
+                        Error::msg(format!("Could not find node for `{}`", "child-value-index"))
+                    })?
                     .utf8_text(content)
                     .with_context(|| format!("Could not extract path for $ref node"))?
                     // Prevent weird file names by removing quotes
@@ -184,15 +216,17 @@ fn get_children_by_key(key: &str, content: &[u8]) -> Result<ChildrenOrRef> {
                     .replace("\"", "");
                 return Ok(ChildrenOrRef::Ref(child_value_node_text.to_owned()));
             }
-            let parent_context_node = qm
+            let child_context_node = qm
                 .nodes_for_capture_index(child_context_index)
                 .last()
-                .unwrap();
+                .ok_or_else(|| {
+                    Error::msg(format!("Could not find node for `{}`", "child-context"))
+                })?;
             results.insert(
                 key_text.to_string(),
-                parent_context_node
+                child_context_node
                     .utf8_text(content)
-                    .with_context(|| format!("Could not extract text for child key"))?
+                    .with_context(|| format!("Could not extract text for child context"))?
                     .to_string(),
             );
         }
