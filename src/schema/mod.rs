@@ -20,7 +20,7 @@ impl Display for ListResult {
 }
 
 pub fn list<T: SchemaParser>(parser: T) -> Result<ListResult, OpenapiSchemerError> {
-    let nodes = parser.get_schema_nodes();
+    let nodes = parser.get_schema_nodes()?;
     let node_texts = nodes
         .into_iter()
         .map(|node| node.text.to_string())
@@ -45,8 +45,8 @@ mod tests {
         }
     }
     impl SchemaParser for MockParser {
-        fn get_schema_nodes(&self) -> Vec<SchemaNode> {
-            self.nodes.to_owned()
+        fn get_schema_nodes(&self) -> Result<Vec<SchemaNode>, OpenapiSchemerError> {
+            Ok(self.nodes.to_owned())
         }
     }
 

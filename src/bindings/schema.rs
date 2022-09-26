@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use crate::content::ContentProvider;
+use anyhow::Context;
+
+use crate::{content::ContentProvider, error::OpenapiSchemerError};
 
 use super::{get_children_by_key, get_top_level_keys, ChildrenOrRef};
 
@@ -10,7 +12,7 @@ pub struct SchemaNode {
 }
 
 pub trait SchemaParser {
-    fn get_schema_nodes(&self) -> Vec<SchemaNode>;
+    fn get_schema_nodes(&self) -> Result<Vec<SchemaNode>, OpenapiSchemerError>;
 }
 
 pub struct TreeSitterSchemaParser {
@@ -24,29 +26,35 @@ impl TreeSitterSchemaParser {
 }
 
 impl SchemaParser for TreeSitterSchemaParser {
-    fn get_schema_nodes(&self) -> Vec<SchemaNode> {
+    fn get_schema_nodes(&self) -> Result<Vec<SchemaNode>, OpenapiSchemerError> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<SchemaNode> = vec![];
 
-        let mut components_children =
-            get_children_by_key("components", content.as_bytes()).unwrap();
+        let mut components_children = get_children_by_key("components", content.as_bytes())
+            .with_context(|| format!("Failed to get children for yaml key `components`"))
+            .map_err(|error| OpenapiSchemerError::SchemaList(error.to_string()))?;
         if let ChildrenOrRef::Ref(r) = components_children {
             let content = self.provider.get_content(PathBuf::from(r));
-            components_children = get_top_level_keys(content.as_bytes()).unwrap();
+            components_children = get_top_level_keys(content.as_bytes())
+                .with_context(|| format!("Failed to get children for yaml key `components`"))
+                .map_err(|error| OpenapiSchemerError::SchemaList(error.to_string()))?;
         }
         match components_children {
-            ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
+            ChildrenOrRef::Ref(_) => {
+                return Err(OpenapiSchemerError::SchemaList(format!(
+                    "$ref cannot link to another $ref"
+                )))
+            }
             ChildrenOrRef::Children(children) => {
-                let schemas_context = children
-                    .get("schemas")
-                    .expect("Did not find schemas within components");
+                let schemas_context = children.get("schemas").unwrap();
                 let schemas_children =
                     get_children_by_key("schemas", schemas_context.as_bytes()).unwrap();
-                if let ChildrenOrRef::Ref(_) = schemas_children {
-                    panic!("Expected structs under schemas key but found $ref instead.");
-                }
                 match schemas_children {
-                    ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
+                    ChildrenOrRef::Ref(_) => {
+                        return Err(OpenapiSchemerError::SchemaList(format!(
+                            "Expected structs under schemas key but found $ref instead"
+                        )));
+                    }
                     ChildrenOrRef::Children(children) => {
                         for (schema_child, _) in children {
                             results.push(SchemaNode { text: schema_child })
@@ -56,7 +64,7 @@ impl SchemaParser for TreeSitterSchemaParser {
             }
         }
 
-        results
+        Ok(results)
     }
 }
 
@@ -110,7 +118,7 @@ components:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterSchemaParser::new(box_provider);
-        let result = parser.get_schema_nodes();
+        let result = parser.get_schema_nodes().unwrap();
         let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
         assert!(
             node_texts.contains(&String::from("Error")),
@@ -177,7 +185,7 @@ schemas:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterSchemaParser::new(box_provider);
-        let result = parser.get_schema_nodes();
+        let result = parser.get_schema_nodes().unwrap();
         let node_texts: Vec<String> = result.into_iter().map(|node| node.text).collect();
         assert!(
             node_texts.contains(&String::from("Error")),
