@@ -1,6 +1,8 @@
+use anyhow::Context;
+use anyhow::Result;
 use std::path::PathBuf;
 
-use crate::content::ContentProvider;
+use crate::{content::ContentProvider, error::OpenapiSchemerError};
 
 use super::{get_children_by_key, get_top_level_keys, ChildrenOrRef, OperationParser};
 
@@ -12,70 +14,66 @@ impl TreeSitterOperationParser {
     pub fn new(provider: Box<dyn ContentProvider>) -> Self {
         Self { provider }
     }
+    fn get_children(
+        &self,
+        key: &str,
+        content: &[u8],
+    ) -> Result<ChildrenOrRef, OpenapiSchemerError> {
+        let mut children = get_children_by_key(key, content)
+            .with_context(|| format!("Failed to get children for yaml key `{}`", key))
+            .map_err(|error| OpenapiSchemerError::OperationList(error.to_string()))?;
+
+        match children {
+            ChildrenOrRef::Children(_) => Ok(children),
+            ChildrenOrRef::Ref(r) => {
+                let content = self.provider.get_content(PathBuf::from(r));
+                children = get_top_level_keys(content.as_bytes())
+                    .with_context(|| format!("Failed to get children for yaml key `{}`", key))
+                    .map_err(|error| OpenapiSchemerError::OperationList(error.to_string()))?;
+                match children {
+                    ChildrenOrRef::Ref(_) => Err(OpenapiSchemerError::OperationList(format!(
+                        "$ref cannot link to another $ref"
+                    ))),
+                    ChildrenOrRef::Children(_) => Ok(children),
+                }
+            }
+        }
+    }
 }
 
 impl OperationParser for TreeSitterOperationParser {
-    fn get_operation_nodes(&self) -> Vec<super::OperationNode> {
+    fn get_operation_nodes(&self) -> Result<Vec<super::OperationNode>, OpenapiSchemerError> {
         let content = self.provider.get_content(PathBuf::from("#"));
         let mut results: Vec<super::OperationNode> = vec![];
 
-        let mut paths_children = get_children_by_key("paths", content.as_bytes()).unwrap();
-        if let ChildrenOrRef::Ref(r) = paths_children {
-            let content = self.provider.get_content(PathBuf::from(r));
-            paths_children = get_top_level_keys(content.as_bytes()).unwrap();
-        }
-        match paths_children {
-            super::ChildrenOrRef::Ref(_) => panic!("Found $ref when following $ref. Aborting."),
-            super::ChildrenOrRef::Children(children) => {
-                for (path, context) in children {
-                    let mut methods =
-                        get_children_by_key(path.as_ref(), context.as_bytes()).unwrap();
-                    if let ChildrenOrRef::Ref(r) = methods {
-                        let content = self.provider.get_content(PathBuf::from(r));
-                        methods = get_top_level_keys(content.as_bytes()).unwrap();
-                    }
-                    match methods {
-                        super::ChildrenOrRef::Ref(_) => {
-                            panic!("Found $ref when following $ref. Aborting.")
-                        }
-                        super::ChildrenOrRef::Children(children) => {
-                            for (operation, context) in children {
-                                let mut operation_child_keys =
-                                    get_children_by_key(operation.as_ref(), context.as_bytes())
-                                        .unwrap();
-                                if let ChildrenOrRef::Ref(r) = operation_child_keys {
-                                    let content = self.provider.get_content(PathBuf::from(r));
-                                    operation_child_keys =
-                                        get_top_level_keys(content.as_bytes()).unwrap();
-                                }
-                                match operation_child_keys {
-                                    super::ChildrenOrRef::Ref(_) => {
-                                        panic!("Found $ref when following $ref. Aborting.")
-                                    }
-                                    super::ChildrenOrRef::Children(children) => {
-                                        // This base case looks pretty gross and maybe it is, but the
-                                        // resulting value of children["operationId"] is the string
-                                        // "operationId: <whatever>". So I just do some string
-                                        // splitting since it should definitely look like that right?
-                                        let operation =
-                                            children.get("operationId").unwrap().to_string();
-                                        let operation = operation
-                                            .split("operationId:")
-                                            .into_iter()
-                                            .last()
-                                            .unwrap()
-                                            .trim()
-                                            .to_owned();
-                                        results.push(super::OperationNode { text: operation })
-                                    }
-                                }
-                            }
+        let paths_children = self.get_children("paths", content.as_bytes())?;
+        if let super::ChildrenOrRef::Children(children) = paths_children {
+            for (path, context) in children {
+                let methods = self.get_children(&path, context.as_bytes())?;
+                if let super::ChildrenOrRef::Children(children) = methods {
+                    for (operation, context) in children {
+                        let operation_child_keys =
+                            self.get_children(&operation, context.as_bytes())?;
+                        if let super::ChildrenOrRef::Children(children) = operation_child_keys {
+                            // This base case looks pretty gross and maybe it is, but the
+                            // resulting value of children["operationId"] is the string
+                            // "operationId: <whatever>". So I just do some string
+                            // splitting since it should definitely look like that right?
+                            let operation = children.get("operationId").unwrap().to_string();
+                            let operation = operation
+                                .split("operationId:")
+                                .into_iter()
+                                .last()
+                                .unwrap()
+                                .trim()
+                                .to_owned();
+                            results.push(super::OperationNode { text: operation })
                         }
                     }
                 }
             }
         }
-        results
+        Ok(results)
     }
 }
 
@@ -110,7 +108,7 @@ paths:
         let contents = HashMap::from([(root_path, root_content.to_owned())]);
         let provider = Box::new(ContentProviderMap::from_map(contents));
         let parser = TreeSitterOperationParser::new(provider);
-        let nodes = parser.get_operation_nodes();
+        let nodes = parser.get_operation_nodes().unwrap();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
         assert!(operation_ids.contains(&String::from("createPets")));
@@ -148,7 +146,7 @@ paths:
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterOperationParser::new(box_provider);
-        let nodes = parser.get_operation_nodes();
+        let nodes = parser.get_operation_nodes().unwrap();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
         assert!(operation_ids.contains(&String::from("createPets")));
@@ -200,7 +198,7 @@ operationId: createPets
         let provider = ContentProviderMap::new();
         let box_provider = Box::new(provider);
         let parser = TreeSitterOperationParser::new(box_provider);
-        let nodes = parser.get_operation_nodes();
+        let nodes = parser.get_operation_nodes().unwrap();
         let operation_ids: Vec<String> = nodes.into_iter().map(|node| node.text).collect();
         assert!(operation_ids.contains(&String::from("listPets")));
         assert!(operation_ids.contains(&String::from("createPets")));

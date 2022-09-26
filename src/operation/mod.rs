@@ -20,7 +20,7 @@ impl Display for ListResult {
 }
 
 pub fn list<T: OperationParser>(parser: T) -> Result<ListResult, OpenapiSchemerError> {
-    let nodes = parser.get_operation_nodes();
+    let nodes = parser.get_operation_nodes()?;
     let node_texts = nodes
         .into_iter()
         .map(|node| node.text.to_string())
@@ -45,8 +45,8 @@ mod tests {
         }
     }
     impl OperationParser for MockParser {
-        fn get_operation_nodes(&self) -> Vec<bindings::OperationNode> {
-            self.nodes.to_owned()
+        fn get_operation_nodes(&self) -> Result<Vec<bindings::OperationNode>, OpenapiSchemerError> {
+            Ok(self.nodes.to_owned())
         }
     }
 

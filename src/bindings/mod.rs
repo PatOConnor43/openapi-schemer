@@ -27,6 +27,8 @@ use tree_sitter::{Language, Parser, Query, QueryCursor};
 #[cfg(test)]
 use mocktopus::macros::mockable;
 
+use crate::error::OpenapiSchemerError;
+
 extern "C" {
     fn tree_sitter_yaml() -> Language;
 }
@@ -211,7 +213,7 @@ pub struct OperationNode {
 }
 
 pub trait OperationParser {
-    fn get_operation_nodes(&self) -> Vec<OperationNode>;
+    fn get_operation_nodes(&self) -> Result<Vec<OperationNode>, OpenapiSchemerError>;
 }
 
 #[cfg(test)]
